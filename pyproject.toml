@@ -1,0 +1,67 @@
+[tool.poetry]
+name = "xsettings"
+version = "1.0.0"
+description = "Settings, way to abstract and centeralize where settings are."
+authors = ["Josh Orr <josh@orr.blue>"]
+packages = [{include = "xsettings"}]
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/xyngular/py-xsettings"
+keywords = ["settings", "lazy", "configuration"]
+classifiers = [
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+
+
+[tool.poetry.dependencies]
+python = "^3.8"
+xsentinels = "^1.2.0"
+xinject = "^1.1.0"
+xloop = "^1.0.1"
+xbool = "^1.0.0"
+ciso8601 = "^2.3.0"
+
+
+[tool.poetry.group.dev.dependencies]
+mkdocs-git-revision-date-plugin = "^0.3.2"
+mkdocs = "^1.4.0"
+mike = "^1.1.2"
+pytest-pycodestyle = "^2.3.0"
+pytest = "^7.1.3"
+pdoc3 = "^0"
+mkdocs-material = "^8.5.6"
+tomlkit = "^0.11.5"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "--verbose --pycodestyle"
+testpaths = ["tests", "xsettings"]
+
+
+[tool.black]
+line-length = 99
+target_version = ['py38']
+skip-string-normalization = 1
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | _build
+    | buck-out
+    | build
+    | dist
+  )/
+  | foo.py           # also separately exclude a file named foo.py in
+                     # the root of the project
+)
+'''
