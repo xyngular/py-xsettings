@@ -40,7 +40,7 @@ def test_use_property_on_settings_subclass():
     value_to_retrieve = "RetrievedValue"
 
     class MyRetriever(SettingsRetriever):
-        def retrieve_value(self, field: SettingsField) -> Any:
+        def retrieve_value(self, field: SettingsField, settings) -> Any:
             nonlocal value_to_retrieve
             return value_to_retrieve
 
@@ -222,13 +222,23 @@ def test_class_field_overwrite():
         MySettings.b = 3
 
 
-def test_settings_inheritance_not_allowed():
+def test_settings_inheritance():
     class MySettings(Settings):
-        a: int
+        a: int = 1
 
-    with pytest.raises(AssertionError):
-        class MySubSettings(MySettings):
-            b: int
+    class MySubSettings(MySettings):
+        b: int = 2
+
+    assert MySubSettings.grab().a == 1
+    assert MySubSettings.grab().b == 2
+
+    # Change default value for field 'a'
+    MySettings.a = 3
+    assert MySubSettings.grab().a == 3
+
+    # Override value for field 'a' from superclass on ym subclass instance.
+    MySubSettings.grab().a = 4
+    assert MySubSettings.grab().a == 4
 
 
 def test_property_as_forward_ref_works_via_return_type():
@@ -446,6 +456,8 @@ def test_super_class_with_default_value_uses_retriever():
         # Define an attribute with some other value:
         some_other_attr = True
 
+        another_attr = 2
+
     class PlainSettings(Settings):
         str_attr: str = "my-str"
         bool_attr: bool = False
@@ -454,6 +466,7 @@ def test_super_class_with_default_value_uses_retriever():
         # Make them fields in our Settings subclass, default value to another settings class.
         some_default_attr: str = PlainSettings.str_attr
         some_other_attr: bool = PlainSettings.bool_attr
+        another_attr: int
 
     my_settings = MySettings.grab()
 
@@ -461,12 +474,9 @@ def test_super_class_with_default_value_uses_retriever():
     # and resolve the 'default' nature of it.
     assert my_settings.some_default_attr == 'my-str'
 
-    # todo: May create a v2 of xyn-settings someday that will look at attributes directly assigned
-    #   to self, then and retrieved value, then any plain super-class set value.
-    #   For now, we treat all super-class values on attributes as-if  they were directly assigned
-    #   to the settings instance; ie: we will NOT try to 'retrieve' the value unless the value is
-    #   set to `Default` in either the instance or superclass (whatever value it finds via normal
-    #   python attribute retrieval rules).
+    # There is a retrieved/default value, so that's used over the superclass value.
+    assert my_settings.some_other_attr is False
 
-    # Super class has an explicit value, so that is what is used over any retrieved/default value.
-    assert my_settings.some_other_attr is True
+    # If Settings can't get field value, it will get it from super-class.
+    assert my_settings.another_attr == 2
+

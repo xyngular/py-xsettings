@@ -6,7 +6,7 @@ from xsettings.settings import SettingsRetriever, Settings
 
 
 class EnvSettingsRetriever(SettingsRetriever):
-    def retrieve_value(self, field: SettingsField) -> Any:
+    def retrieve_value(self, field: SettingsField, settings: Settings) -> Any:
         return os.environ.get(field.name)
 
 

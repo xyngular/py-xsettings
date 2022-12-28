@@ -178,13 +178,17 @@ class SettingsField:
         But in summary, it works like normal python properties
         except that we currently put the property function into the `retreiver`
         SettingsField attribute instead of `fget`
-        (Python `property` objects use `fget` to store property function).
+        (normal Python `property` objects use the `fget` attribute to store the property function).
 
         Again, I would encourage you to read the [Properties](./#properties) section for
         more details.
 
         Property setters are currently unsupported (see Properties section/link above for
         more details on why). It's something we could support in the future if we wanted.
+
+        For now, when someone sets a value on a property getter, we will store that as the
+        settings field value and return that in the future
+        (ie: overriding the retriever property method with a set value).
 
         You can define a property like normal, and Settings will create a default SettingsField
         object for it like you would expect.

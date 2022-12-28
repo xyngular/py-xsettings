@@ -5,7 +5,7 @@ See doc-comments for `Settings` below.
 
 """
 
-from typing import Dict, Any, Union, TypeVar
+from typing import Dict, Any, Union, TypeVar, Protocol, Optional
 
 from xinject import Dependency
 from xsentinels import Default
@@ -13,6 +13,12 @@ from xsentinels import Default
 from xsettings.fields import generate_setting_fields, SettingsField, SettingsClassProperty
 
 T = TypeVar("T")
+
+# Tell pdoc3 to document the normally private method __call__.
+__pdoc__ = {
+    "SettingsRetrieverCallable.__call__": True,
+    "SettingsRetriever.__call__": True,
+}
 
 
 # It's both an attribute and a value error
@@ -23,7 +29,7 @@ class SettingsValueError(ValueError, AttributeError):
     pass
 
 
-class SettingsRetrieverCallable:
+class SettingsRetrieverCallable(Protocol):
 
     """
     The purpose of the base SettingsRetrieverCallable is to define the base-interface for
@@ -39,6 +45,9 @@ class SettingsRetrieverCallable:
         This is how the Settings field, when retrieving its value, will call us.
         You must override this (or simply use a normal function with the same parameters).
 
+        This convention gives flexibility: It allows simple methods to be retrievers,
+        or more complex objects to be them too (via __call__).
+
         Args:
             field: Field we need to retrieve.
             settings: Related Settings object that has the field we are retrieving.
@@ -52,8 +61,11 @@ class SettingsRetrieverCallable:
 
 class SettingsRetriever(SettingsRetrieverCallable):
     """
-    The purpose of the base SettingsRetriever is to define the base-interface for retrieving
-    settings values along with a default/basic implementation.
+    The purpose of the base SettingsRetriever is to define a default/basic implementation
+    for retrieving settings values.
+
+    TO create a custom retriever, you can inherit from this class or simply
+    provide a method with the same signature as `SettingsRetrieverCallable.__call__`.
 
     If a setting is required (default) and there is no default value provided,
     we will raise an `SettingsValueError` (which inherits from standard ValueError).
@@ -77,6 +89,10 @@ class SettingsRetriever(SettingsRetrieverCallable):
         """
         This is how the Settings field, when retrieving its value, will call us.
         We turn around and simply call our `get` method.
+
+        This convention gives flexibility: It allows simple methods to be retrievers,
+        or more complex objects to be them too (via __call__).
+
         Args:
             field: Field we need to retrieve.
             settings: Related Settings object that has the field we are retrieving.
@@ -105,20 +121,45 @@ class SettingsRetriever(SettingsRetrieverCallable):
             settings: Related Settings object that has the field we are retrieving.
 
         Returns: Retrieved value, or None if no value can be found.
+            System will check its type against `SettingsField.type_hint` and run the
+            `SettingsField.converter` on returned value if the type differs.
         """
-        value = self.retrieve_value(field)
+        value = self.retrieve_value(field, settings=settings)
         if value is None:
             value = field.default_value
             if value and hasattr(value, '__get__'):
                 value = value.__get__(settings, type(settings))
         if value is None:
-            value = self.handle_missing_value(field, context_msg='while retrieving value')
+            value = self.handle_missing_value(field, settings=settings, context_msg='while retrieving value')
         return value
 
-    def retrieve_value(self, field: SettingsField) -> Any:
+    def retrieve_value(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
+        """
+        `SettingsRetriever.get` will call this method if it determines that a value needs
+        to be retrieved.
+
+        Returning a `None` will cause `SettingsRetriever.get` to check for a default value on
+        the field.
+
+        If no default value is found, then it will next call
+        `SettingsRetriever.handle_missing_value`; the default implementation of that method will
+        raise a `xsettings.errors.SettingsValueError` if the `SettingsField.required` is True,
+        otherwise it will return None which `SettingsRetriever.get` will pass back as the
+        value for the field.
+
+        Args:
+            field: Field to retrieve value or.
+            settings: Associated settings instance that was used to ask for value for field.
+
+        Returns:
+            Any: Retrieved value; system will check its type against `SettingsField.type_hint`
+                and run the `SettingsField.converter` on returned value if the type differs.
+        """
         return None
 
-    def handle_missing_value(self, field: SettingsField, context_msg: str = None) -> Any:
+    def handle_missing_value(
+            self, field: SettingsField, /, *, settings: 'Settings', context_msg: str = None
+    ) -> Any:
         if field.required:
             # Data-classes will print out all their fields by default, should give good info!
             msg = f"Missing value for {field}"
@@ -132,8 +173,8 @@ class SettingsRetriever(SettingsRetrieverCallable):
 class PropertyRetriever(SettingsRetriever):
     """
     What is used to wrap a `@property` on a Settings subclass.
-    We don't use the default retrieve for properties, we instead use `PropertyRetriever`,
-    as the property it's self is basically the 'retriever'.
+    We don't use the default retriever for any defined properties on a Settings subclass,
+    we instead use `PropertyRetriever`; as the property it's self is considered the 'retriever'.
 
     Will first check the property getter function when retrieving a value before
     doing anything else (such as using the default_value for the field, etc, etc).
@@ -143,20 +184,13 @@ class PropertyRetriever(SettingsRetriever):
     def __init__(self, property_retriever: property):
         self.property_retriever = property_retriever
 
-    def get(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
-        """ Have to override `get` instead of `retrieve_value` to get `settings` param;
-            which is needed by the property to know what instance it's being called on.
+    def retrieve_value(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
+        """ Asks associated property method on the Settings subclass to retrieve the value.
+            Normal processing happens with value after that, in that if a `None` is returned
+            then the system will check for a Default value and then call `handle_missing_value`
+            which will raise an exception if it's still None.
         """
-        value = self.property_retriever.__get__(settings, type(settings))
-        if value is not None:
-            return value
-        return super().get(field, settings=settings)
-
-
-def _assert_settings_field_inheritance_not_allowed(bases):
-    for base in bases:
-        if getattr(base, '_setting_fields', None):
-            raise AssertionError("Settings Field inheritance not supported")
+        return self.property_retriever.__get__(settings, type(settings))
 
 
 def _load_default_retriever(bases, default_retriever):
@@ -199,7 +233,7 @@ class _SettingsMeta(type):
         (not Settings object, the class its self).
 
         Objective in this method is to create a set of SettingsField object(s) for use by the new
-        Settings sub-class, and set their default-settings correctly if the user did not
+        Settings subclass, and set their default-settings correctly if the user did not
         provide an explict setting.
 
         Args:
@@ -215,12 +249,16 @@ class _SettingsMeta(type):
 
             **kwargs: Any extra arguments get supplied to the super-class-type.
         """
+        # These defaults may be altered later on in this method (after class is created)...
+        attrs['_there_is_plain_superclass'] = False
+        attrs['_order_of_parent_setting_classes'] = []
+
         if __name__ == attrs['__module__']:
-            # Skip any Settings classes created in this module
+            # Skip doing anything special with any Settings classes created in our/this module;
+            # They are abstract classes and are need to be sub-classed to do anything with them.
+            attrs['_setting_fields'] = {}
             cls = super().__new__(mcls, name, bases, attrs, **kwargs)  # noqa
             return cls
-
-        _assert_settings_field_inheritance_not_allowed(bases)
 
         default_retriever = _load_default_retriever(bases, default_retriever)
         setting_fields = generate_setting_fields(attrs, default_retriever)
@@ -231,14 +269,37 @@ class _SettingsMeta(type):
             attrs.pop(k, None)
 
         # This creates the new Settings class/subclass.
-        cls = super().__new__(mcls, name, bases, attrs, **kwargs)  # noqa
+        cls = super().__new__(mcls, name, bases, attrs, **kwargs)
 
-        for field in setting_fields.values():
+        # We now link source_class of each field to us.
+        for field in cls._setting_fields.values():
             field.source_class = cls
 
+        # And look through the __mro__ python determined while creating the class,
+        # we cache the specific ones/information we need this one time so future operators
+        # are simpler/faster.
+        order_of_setting_classes = []
+        for c in cls.__mro__:
+            # Skip the ones that are always present, and don't need to examined...
+            if c is Settings:
+                continue
+            if c is object:
+                continue
+            if c is Dependency:
+                continue
+
+            # We want to know the order if aby Settings subclasses that we are inheriting from.
+            # Also want to know if there are any plain/non-setting classes in our parent hierarchy
+            # (that are not object/Dependency, as they both will always be present).
+            if issubclass(c, Settings):
+                order_of_setting_classes.append(c)
+            else:
+                cls._there_is_plain_superclass = True
+
+        cls._order_of_parent_setting_classes = order_of_setting_classes
         return cls
 
-    def __getattr__(self, key: str):
+    def __getattr__(self, key: str) -> SettingsClassProperty:
         """
         We will return a `ClassProperty` object setup to retrieve the value asked for as
         a type of forward-reference/pointer. It will, when set into an object or class,
@@ -258,12 +319,17 @@ class _SettingsMeta(type):
         if key.startswith("_"):
             return super().__getattr__(key)
 
-        setting_fields = self._setting_fields
-        if key not in setting_fields:
-            raise AttributeError(
-                f"Have no class-attribute or defined SettingsField for "
-                f"attribute name ({key}) on Settings subclass ({self})."
-            )
+        for c in self._order_of_parent_setting_classes:
+            c: _SettingsMeta
+            if key in c._setting_fields:
+                break
+            # We got to `Settings` without finding anything, Settings has no fields,
+            # raise exception about how we could not find field.
+            if c is Settings:
+                raise AttributeError(
+                    f"Have no class-attribute or defined SettingsField for "
+                    f"attribute name ({key}) on Settings subclass ({self})."
+                )
 
         @SettingsClassProperty
         def lazy_retriever(calling_cls):
@@ -282,19 +348,27 @@ class _SettingsMeta(type):
         if key.startswith("_"):
             return super().__setattr__(key, value)
 
-        # Set default value of an existing field with `key` attribute-name:
-        existing_settings_field = self._setting_fields.get(key)
-        if existing_settings_field:
-            existing_settings_field.default_value = value
-            return
+        field = None
+        for c in self._order_of_parent_setting_classes:
+            c: _SettingsMeta
+            if field := c._setting_fields.get(key):
+                break
+            # We got to `Settings` without finding anything, Settings has no fields,
+            # giveup searching for field.
+            if c is Settings:
+                break
 
-        # Right now we don't support making new SettingField's after the Settings subclass
-        # has been created. We could decide to do that in the future, but for now we
-        # are keeping things simpler.
-        raise AttributeError(
-            f"Setting new fields on Settings subclass unsupported currently, attempted to "
-            f"set key ({key}) with value ({value})."
-        )
+        if not field:
+            # Right now we don't support making new SettingField's after the Settings subclass
+            # has been created. We could decide to do that in the future, but for now we
+            # are keeping things simpler.
+            raise AttributeError(
+                f"Setting new fields on Settings subclass unsupported currently, attempted to "
+                f"set key ({key}) with value ({value})."
+            )
+
+        # Set default value of an existing field with `key` attribute-name:
+        field.default_value = value
 
 
 class Settings(Dependency, metaclass=_SettingsMeta, default_retriever=SettingsRetriever()):
@@ -412,38 +486,110 @@ class Settings(Dependency, metaclass=_SettingsMeta, default_retriever=SettingsRe
 
         attr_error = None
         value = None
-        field: SettingsField = self._setting_fields.get(key)
+        already_retrieved_normal_value = False
+
+        field: Optional[SettingsField] = None
+        for c in type(self)._order_of_parent_setting_classes:
+            c: _SettingsMeta
+            # todo: use isinstance?
+            if c is Settings:
+                # We got to the 'Settings' base-class it's self, no need to go any further.
+                break
+            if field := c._setting_fields.get(key):
+                # Found the field, break out of loop.
+                break
+
+        def get_normal_value():
+            nonlocal value
+            nonlocal attr_error
+
+            # Keep track that we already attempted to get normal value.
+            nonlocal already_retrieved_normal_value
+            already_retrieved_normal_value = True
+
+            try:
+                # Look for an attribute on self first.
+                value = object.__getattribute__(self, key)
+                if hasattr(value, "__get__"):
+                    value = value.__get__(self, type(self))
+                attr_error = None
+            except AttributeError as error:
+                attr_error = error
+
+        # We don't want to grab the value like normal if we are a field
+        # and DON'T have a locally/instance value defined for attribute.
+        # This helps Setting classes that are subclasses of Plain classes
+        # attempt to retrieve the value via the field retriever/mechanism
+        # before using that plain-classes, class attribute.
+        #
+        # Otherwise, the plain-class attribute would ALWAYS be used over the field,
+        # making the subclasses field definition somewhat useless.
+        if not self._there_is_plain_superclass or not field or key in self.__dict__:
+            get_normal_value()
 
         try:
-            # Look for an attribute on self first.
-            value = object.__getattribute__(self, key)
-            if hasattr(value, "__get__"):
-                value = value.__get__(self, type(self))
-        except AttributeError as error:
-            attr_error = error
+            if field:
+                # If we have a field, and current value is Default, or we got AttributeError,
+                # we attempt to retrieve the value via the field's retriever.
+                if not already_retrieved_normal_value or attr_error or value is Default:
+                    value = field.retrieve_value(settings=self)
 
-        if field:
-            # If we have a field, and current value is Default, or we got AttributeError,
-            # we attempt to retrieve the value via the field's retriever.
-            if attr_error or value is Default:
-                value = field.retrieve_value(settings=self)
+                value = field.convert_value(value)
 
-            value = field.convert_value(value)
+                if value is None and field.required:
+                    raise SettingsValueError(
+                        f'Field ({field}) is required and the value we have is `None` at this point; '
+                        f'None is either directly assigned as an attribute to self or is in a '
+                        f'superclass... If you want to force Settings to attempt to retrieve the '
+                        f'value BUT you also need to have a value of some sort set on the attribute '
+                        f'in either the instance or a superclass: set the value to '
+                        f'`xsentinels.Default` instead of `None`, this value will force Settings to '
+                        f'attempt to retrieve the value (retrieval could be a property retriever on'
+                        f'your settings class, or a forward-ref to another settings class, or in the'
+                        f'case of `ConfigRetreiver`, retrieving from Config.'
+                    )
+                return value
+        except SettingsValueError as e:
+            # We had a field and could not retrieve the value, if we have not already attempted
+            # to get the 'normal' value via our base-classes attributes, then attempt that...
+            if already_retrieved_normal_value:
+                # Just continue the original exception
+                raise
+
+            get_normal_value()
+            if attr_error:
+                # Could not get the normal value from superclass, raise original exception.
+                # todo: for Python 3.11, we can raise both exceptions (e + attr_error)
+                #       we actually have two separate trees of exceptions here!
+                #       For now we are prioritizing field value retrieval exception
+                #       as the 'from' exception and putting the plain-class attribute error
+                #       inside this exception.,
+                raise SettingsValueError(
+                    f"After attempting to get field value "
+                    f"(the 'from' exception with message [{e}]); "
+                    f"I tried to get value from plain superclass and that was also unsuccessful "
+                    f"and produced exception/error: ({attr_error}); "
+                    f"for field ({field})."
+                ) from e
 
             if value is None and field.required:
                 raise SettingsValueError(
-                    f'Field ({field}) is required and the value we have is `None` at this point; '
-                    f'None is either directly assigned as an attribute to self or is in a '
-                    f'superclass... If you want to force Settings to attempt to retrieve the '
-                    f'value BUT you also need to have a value of some sort set on the attribute '
-                    f'in either the instance or a superclass: set the value to '
-                    f'`xsentinels.Default` instead of `None`, this value will force Settings to '
-                    f'attempt to retrieve the value (retrieval could be a property retriever on'
-                    f'your settings class, or a forward-ref to another settings class, or in the'
-                    f'case of `ConfigRetreiver`, retrieving from Config.'
-                )
+                    f"After attempting to get field value I next tried to get it from the plain "
+                    f"superclass but got None (details: via 'from' exception with message {e}); "
+                    f"for field ({field})."
+                ) from e
 
-        elif attr_error:
+            value = field.convert_value(value)
+            if value is None and field.required:
+                raise SettingsValueError(
+                    f"After attempting to get field value I next tried to get it from the plain "
+                    f"superclass, it came back with a value. But after running the `converter` on "
+                    f"the retrieved value a None was the result and this field is required; "
+                    f"for field ({field})."
+                ) from e
+            return value
+
+        if attr_error:
             raise AttributeError(
                 f"Unable to retrieve settings attribute ({key}) from ({self}), "
                 f"there was no defined class-level settings field and no value set for "
