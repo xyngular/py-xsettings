@@ -1,7 +1,10 @@
 import dataclasses
-from typing import Callable
+from typing import Callable, Iterable
 from copy import copy
 from typing import Type, Any, Dict, Generic, TypeVar, TYPE_CHECKING, get_type_hints
+
+from xloop import xloop
+
 from .default_converters import DEFAULT_CONVERTERS
 from xsentinels import unwrap_union, Default
 
@@ -336,7 +339,9 @@ def _allowed_field(k: str, v):
     return not callable(v)
 
 
-def generate_setting_fields(attrs, default_retriever) -> Dict[str, SettingsField]:
+def generate_setting_fields(
+        attrs, parent_fields: Dict[str, SettingsField] = None
+) -> Dict[str, SettingsField]:
     """
     Takes a dict of class attributes and returns a dict of SettingsField.
     Ignores any attr that is private (starts with '_') or is a callable or has __get__ defined
@@ -345,7 +350,7 @@ def generate_setting_fields(attrs, default_retriever) -> Dict[str, SettingsField
 
     Args:
         attrs:
-        default_retriever:
+        setting_subclasses_in_mro:
 
     Returns:
         Dict[str, SettingsField] -- Note: All returned SettingsFields will always have the
@@ -358,6 +363,9 @@ def generate_setting_fields(attrs, default_retriever) -> Dict[str, SettingsField
         - field.source_name (Name of attrs key)
 
     """
+    if not parent_fields:
+        parent_fields = {}
+
     annotations = attrs.get("__annotations__", None)
     fields = {k: v for k, v in attrs.items() if _allowed_field(k, v)}
 
@@ -368,13 +376,29 @@ def generate_setting_fields(attrs, default_retriever) -> Dict[str, SettingsField
                 allowed_field_names.add(key)
 
     setting_fields: Dict[str, SettingsField] = {}
+    already_merged_parent_for_field = set()
 
-    def merge_field(name, merge_field):
-        if name not in setting_fields:
-            setting_fields[name] = SettingsField(
-                name=name, source_name=name, retriever=default_retriever
+    def merge_field(attr_key, merge_field):
+        if attr_key not in setting_fields:
+            setting_fields[attr_key] = SettingsField(
+                name=attr_key, source_name=attr_key
             )
-        setting_fields[name].merge(merge_field)
+
+        # If we have not merged parent field yet,
+        # then do so first before we merge anything else into new field.
+        #
+        # The objective is to only merge parents into fields that are defined/overriden
+        # on the child-class; we don't otherwise want the parent-field in the child-class.
+        #
+        # If they are not defined as new field on the child class, we should directly
+        # use the parent field when it's asked for on child and NOT generate a new child field
+        # for that parent field.
+        if attr_key not in already_merged_parent_for_field:
+            already_merged_parent_for_field.add(attr_key)
+            if p_field := parent_fields.get(attr_key):
+                setting_fields[attr_key].merge(p_field)
+
+        setting_fields[attr_key].merge(merge_field)
 
     _add_field_default_from_attrs(fields, merge_field)
     _add_field_typehints_from_annotations(annotations, allowed_field_names, merge_field)
@@ -507,12 +531,13 @@ def _add_field_overrides_from_attrs(field_attrs: Dict[str, Any], merge_field):
     fields from them.
     """
     for k, v in field_attrs.items():
-        field = v
         if isinstance(v, SettingsField):
-            merge_field(k, field)
+            merge_field(k, v)
 
 
 def _assert_retriever_valid(field):
+    if field.retriever is None:
+        return
     assert callable(field.retriever), (
         f"Invalid retriever for field {field}, needs to be callable, see "
         f"SettingsRetrieverCallable."

@@ -5,9 +5,10 @@ See doc-comments for `Settings` below.
 
 """
 
-from typing import Dict, Any, Union, TypeVar, Protocol, Optional
+from typing import Dict, Any, Union, TypeVar, Protocol, Optional, Iterable, List, Type
 
 from xinject import Dependency
+from xloop import xloop
 from xsentinels import Default
 
 from xsettings.fields import generate_setting_fields, SettingsField, SettingsClassProperty
@@ -29,7 +30,9 @@ class SettingsValueError(ValueError, AttributeError):
     pass
 
 
-class SettingsRetrieverCallable(Protocol):
+# todo: remove use of `SettingsRetrieverCallable`
+
+class SettingsRetriever(Protocol):
 
     """
     The purpose of the base SettingsRetrieverCallable is to define the base-interface for
@@ -40,7 +43,7 @@ class SettingsRetrieverCallable(Protocol):
     see that class for more details on what happens by default.
     """
 
-    def __call__(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
+    def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
         """
         This is how the Settings field, when retrieving its value, will call us.
         You must override this (or simply use a normal function with the same parameters).
@@ -53,121 +56,11 @@ class SettingsRetrieverCallable(Protocol):
             settings: Related Settings object that has the field we are retrieving.
 
         Returns: Retrieved value, or None if no value can be found.
+            By default, we return `None` (as we are a basic/abstract retriever)
         """
         raise NotImplementedError(
-            "You must implement `__call__` in your `SettingsRetrieverCallable` interface."
+            "Abstract Method - Must implement `__call__` function with correct arguments."
         )
-
-
-class SettingsRetriever(SettingsRetrieverCallable):
-    """
-    The purpose of the base SettingsRetriever is to define a default/basic implementation
-    for retrieving settings values.
-
-    TO create a custom retriever, you can inherit from this class or simply
-    provide a method with the same signature as `SettingsRetrieverCallable.__call__`.
-
-    If a setting is required (default) and there is no default value provided,
-    we will raise an `SettingsValueError` (which inherits from standard ValueError).
-
-    (Note To Kevin: You used a standard `ValueError`... I guess I was thinking it might be nice
-    to distinguish it, so I am using a SettingsValueError that inherits from ValueError).
-
-    Retriever object to use to retrieve settings from some source.
-    By default, it's the base `SettingsRetriever` which has basic logic in it that handles:
-
-    - default values
-    - missing values
-
-    Subclasses would normally just need to override the `SettingsRetriever.retrieve_value`
-    method and retrieve the setting value requested.
-
-    But they can also override other methods to customize the behavior more if needed.
-    """
-
-    def __call__(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
-        """
-        This is how the Settings field, when retrieving its value, will call us.
-        We turn around and simply call our `get` method.
-
-        This convention gives flexibility: It allows simple methods to be retrievers,
-        or more complex objects to be them too (via __call__).
-
-        Args:
-            field: Field we need to retrieve.
-            settings: Related Settings object that has the field we are retrieving.
-
-        Returns: Retrieved value, or None if no value can be found.
-        """
-        return self.get(field, settings=settings)
-
-    def get(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
-        """
-        This is the standard 'get' method for `SettingsRetriever` subclasses.
-
-        We will first call `self.retrieve_value`.
-
-        If that returns a None, we next check for a `default_value` on the field and use that.
-        If the `default_value` is a property (has a `__get__`), we will call `__get__` on
-        the `default_value` and use the returned value.
-
-        If we still have a None value after all that, we call `handle_missing_value`.
-        Normally `handle_missing_value` will raise an exception if the field is required
-        (fields are required by default). You can override the method to change the behavior
-        if you wish
-
-        Args:
-            field: Field we need to retrieve.
-            settings: Related Settings object that has the field we are retrieving.
-
-        Returns: Retrieved value, or None if no value can be found.
-            System will check its type against `SettingsField.type_hint` and run the
-            `SettingsField.converter` on returned value if the type differs.
-        """
-        value = self.retrieve_value(field, settings=settings)
-        if value is None:
-            value = field.default_value
-            if value and hasattr(value, '__get__'):
-                value = value.__get__(settings, type(settings))
-        if value is None:
-            value = self.handle_missing_value(field, settings=settings, context_msg='while retrieving value')
-        return value
-
-    def retrieve_value(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
-        """
-        `SettingsRetriever.get` will call this method if it determines that a value needs
-        to be retrieved.
-
-        Returning a `None` will cause `SettingsRetriever.get` to check for a default value on
-        the field.
-
-        If no default value is found, then it will next call
-        `SettingsRetriever.handle_missing_value`; the default implementation of that method will
-        raise a `xsettings.errors.SettingsValueError` if the `SettingsField.required` is True,
-        otherwise it will return None which `SettingsRetriever.get` will pass back as the
-        value for the field.
-
-        Args:
-            field: Field to retrieve value or.
-            settings: Associated settings instance that was used to ask for value for field.
-
-        Returns:
-            Any: Retrieved value; system will check its type against `SettingsField.type_hint`
-                and run the `SettingsField.converter` on returned value if the type differs.
-        """
-        return None
-
-    def handle_missing_value(
-            self, field: SettingsField, /, *, settings: 'Settings', context_msg: str = None
-    ) -> Any:
-        if field.required:
-            # Data-classes will print out all their fields by default, should give good info!
-            msg = f"Missing value for {field}"
-            if context_msg:
-                msg = f"{msg}, {context_msg}"
-
-            raise SettingsValueError(f'{msg}.')
-        return None
 
 
 class PropertyRetriever(SettingsRetriever):
@@ -184,21 +77,16 @@ class PropertyRetriever(SettingsRetriever):
     def __init__(self, property_retriever: property):
         self.property_retriever = property_retriever
 
-    def retrieve_value(self, field: SettingsField, /, *, settings: 'Settings') -> Any:
-        """ Asks associated property method on the Settings subclass to retrieve the value.
-            Normal processing happens with value after that, in that if a `None` is returned
-            then the system will check for a Default value and then call `handle_missing_value`
-            which will raise an exception if it's still None.
-        """
+    def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
         return self.property_retriever.__get__(settings, type(settings))
 
 
-def _load_default_retriever(bases, default_retriever):
+def _load_default_retriever(setting_subclasses_in_mro, default_retriever):
     if default_retriever:
         return default_retriever
 
     # Look for a retrieve in base classes.
-    for base in bases:
+    for base in setting_subclasses_in_mro:
         if default_retriever := getattr(base, '_default_retriever', None):
             return default_retriever
 
@@ -215,9 +103,21 @@ class _SettingsMeta(type):
         type/class is created (it represents the class/type its self).
     """
 
-    # This will be a class-attribute on the normal Settings class.
-    _setting_fields: Dict[str, SettingsField] = None
-    _default_retriever: SettingsRetrieverCallable = None
+    # This will be a class-attributes on the normal `Settings` class/subclasses.
+    _setting_fields: Dict[str, SettingsField]
+    _retrievers: List[SettingsRetriever]
+
+    _there_is_plain_superclass: bool
+    """ There is some other superclass, other then Settings/object/Dependency. """
+
+    _setting_subclasses_in_mro: 'List[Type[Settings]]'
+    """
+    Includes self/cls plus all superclasses who are Settings subclasses in __mro__
+    (but not Settings it's self); in the same order that they appears in __mro__.
+    """
+
+    def retrievers(cls, retriever: SettingsRetriever):
+        cls._retrievers.append(retriever)
 
     def __new__(
         mcls,
@@ -225,7 +125,8 @@ class _SettingsMeta(type):
         bases,
         attrs: Dict[str, Any],
         *,
-        default_retriever: SettingsRetrieverCallable = None,
+        retrievers: Union[SettingsRetriever, Iterable[SettingsRetriever]] = None,
+        skip_field_generation: bool = False,
         **kwargs,
     ):
         """
@@ -251,35 +152,27 @@ class _SettingsMeta(type):
         """
         # These defaults may be altered later on in this method (after class is created)...
         attrs['_there_is_plain_superclass'] = False
-        attrs['_order_of_parent_setting_classes'] = []
+        attrs['_setting_subclasses_in_mro'] = []
+        attrs['_retrievers'] = list(xloop(retrievers))
 
-        if __name__ == attrs['__module__']:
+        if skip_field_generation:
             # Skip doing anything special with any Settings classes created in our/this module;
             # They are abstract classes and are need to be sub-classed to do anything with them.
             attrs['_setting_fields'] = {}
             cls = super().__new__(mcls, name, bases, attrs, **kwargs)  # noqa
             return cls
 
-        default_retriever = _load_default_retriever(bases, default_retriever)
-        setting_fields = generate_setting_fields(attrs, default_retriever)
-        attrs["_default_retriever"] = default_retriever
-        attrs["_setting_fields"] = setting_fields
-
-        for k in setting_fields.keys():
-            attrs.pop(k, None)
-
-        # This creates the new Settings class/subclass.
-        cls = super().__new__(mcls, name, bases, attrs, **kwargs)
-
-        # We now link source_class of each field to us.
-        for field in cls._setting_fields.values():
-            field.source_class = cls
+        # W need to get base-types in mro order, before we create the class.
+        types_in_mro = type(name, bases, {}, skip_field_generation=True).__mro__[1:]
 
         # And look through the __mro__ python determined while creating the class,
         # we cache the specific ones/information we need this one time so future operators
         # are simpler/faster.
-        order_of_setting_classes = []
-        for c in cls.__mro__:
+        setting_subclasses_in_mro = []
+
+        # We install can't include 'us' because our type has not been created yet.
+        attrs['_setting_subclasses_in_mro'] = setting_subclasses_in_mro
+        for c in types_in_mro:
             # Skip the ones that are always present, and don't need to examined...
             if c is Settings:
                 continue
@@ -292,11 +185,37 @@ class _SettingsMeta(type):
             # Also want to know if there are any plain/non-setting classes in our parent hierarchy
             # (that are not object/Dependency, as they both will always be present).
             if issubclass(c, Settings):
-                order_of_setting_classes.append(c)
+                setting_subclasses_in_mro.append(c)
             else:
-                cls._there_is_plain_superclass = True
+                attrs['_there_is_plain_superclass'] = True
 
-        cls._order_of_parent_setting_classes = order_of_setting_classes
+        parent_fields = {}
+
+        for c in reversed(setting_subclasses_in_mro):
+            parent_fields.update(c._setting_fields)
+
+        # default_retriever = _load_default_retriever(setting_subclasses_in_mro, default_retriever)
+        setting_fields = generate_setting_fields(
+            attrs, parent_fields
+        )
+
+        attrs["_setting_fields"] = setting_fields
+
+        # Any attributes that were converted to fields we remove from class attributes,
+        # they instead will be dynamically looked up lazily as-needed via their associated field.
+        for k in setting_fields.keys():
+            attrs.pop(k, None)
+
+        # This creates the new Settings class/subclass.
+        cls = super().__new__(mcls, name, bases, attrs, **kwargs)
+
+        # Insert newly crated class into top of its setting subclasses list.
+        cls._setting_subclasses_in_mro.insert(0, cls)
+
+        # We now link source_class of each field to us; helps with debugging.
+        for field in setting_fields.values():
+            field.source_class = cls
+
         return cls
 
     def __getattr__(self, key: str) -> SettingsClassProperty:
@@ -319,7 +238,7 @@ class _SettingsMeta(type):
         if key.startswith("_"):
             return super().__getattr__(key)
 
-        for c in self._order_of_parent_setting_classes:
+        for c in self._setting_subclasses_in_mro:
             c: _SettingsMeta
             if key in c._setting_fields:
                 break
@@ -349,12 +268,12 @@ class _SettingsMeta(type):
             return super().__setattr__(key, value)
 
         field = None
-        for c in self._order_of_parent_setting_classes:
+        for c in self._setting_subclasses_in_mro:
             c: _SettingsMeta
             if field := c._setting_fields.get(key):
                 break
             # We got to `Settings` without finding anything, Settings has no fields,
-            # giveup searching for field.
+            # give-up searching for field.
             if c is Settings:
                 break
 
@@ -371,7 +290,17 @@ class _SettingsMeta(type):
         field.default_value = value
 
 
-class Settings(Dependency, metaclass=_SettingsMeta, default_retriever=SettingsRetriever()):
+
+
+class Settings(
+    Dependency,
+    metaclass=_SettingsMeta,
+    retrievers=[],
+
+    # Settings has no fields, it's a special abstract-type of class skip field generation.
+    # You should never use this option in a Settings subclass.
+    skip_field_generation=True
+):
     """
     Base Settings class. For all class properties defined there will be a corresponding
     _settings_field["name"] = SettingsField created value that will control how this value is
@@ -489,7 +418,7 @@ class Settings(Dependency, metaclass=_SettingsMeta, default_retriever=SettingsRe
         already_retrieved_normal_value = False
 
         field: Optional[SettingsField] = None
-        for c in type(self)._order_of_parent_setting_classes:
+        for c in type(self)._setting_subclasses_in_mro:
             c: _SettingsMeta
             # todo: use isinstance?
             if c is Settings:
@@ -532,7 +461,25 @@ class Settings(Dependency, metaclass=_SettingsMeta, default_retriever=SettingsRe
                 # If we have a field, and current value is Default, or we got AttributeError,
                 # we attempt to retrieve the value via the field's retriever.
                 if not already_retrieved_normal_value or attr_error or value is Default:
-                    value = field.retrieve_value(settings=self)
+                    def self_and_parent_retrievers():
+                        for parent_class in type(self)._setting_subclasses_in_mro:
+                            for r in parent_class._retrievers:
+                                yield r
+                    for retriever in xloop(field.retriever, self_and_parent_retrievers()):
+                        value = retriever(field=field, settings=self)
+                        if value is not None:
+                            break
+
+                    if value is None:
+                        value = field.default_value
+                    if value and hasattr(value, '__get__'):
+                        value = value.__get__(self, type(self))
+
+                    if value is None:
+                        if field.required:
+                            # Data-classes will print out all their fields by default, should give good info!
+                            raise SettingsValueError(f"Missing value for {field}, while retrieving value.")
+                        value = None
 
                 value = field.convert_value(value)
 

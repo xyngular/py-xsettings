@@ -1,8 +1,9 @@
 import os
+from copy import copy
 from decimal import Decimal
 from enum import Enum
 import datetime as dt
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 from xsentinels import Default
@@ -40,14 +41,14 @@ def test_use_property_on_settings_subclass():
     value_to_retrieve = "RetrievedValue"
 
     class MyRetriever(SettingsRetriever):
-        def retrieve_value(self, field: SettingsField, settings) -> Any:
+        def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
             nonlocal value_to_retrieve
             return value_to_retrieve
 
     class MyForwardSettings(Settings):
         my_forwarded_field: str = "my_forwarded_field-value"
 
-    class MySettings(Settings, default_retriever=MyRetriever()):
+    class MySettings(Settings, retrievers=MyRetriever()):
         my_field = "my_field-value"
 
         @property
@@ -480,3 +481,75 @@ def test_super_class_with_default_value_uses_retriever():
     # If Settings can't get field value, it will get it from super-class.
     assert my_settings.another_attr == 2
 
+
+def test_inherit_settings_fields_from_parent_and_override_in_child():
+    class MyParentSettings(Settings):
+        # Make them fields in our Settings subclass, default value to another settings class.
+        a: str
+        b: bool = SettingsField(name="b_alt_name")
+        c: int
+
+    class MyChildSettings(MyParentSettings):
+        a: str = SettingsField(name='a_alt')
+
+    parent_fields = MyParentSettings._setting_fields
+    child_fields = MyChildSettings._setting_fields
+
+    # Should only have the 'a' field
+    assert len(child_fields) == 1
+    assert 'a' in child_fields
+
+    # Grab the 'a' field from parent/child to compare...
+    c_field: SettingsField = child_fields['a']
+    p_field: SettingsField = parent_fields['a']
+
+    # Only thing that was changed in child was the `name`, and the `source_class` is always
+    # auto-set to the class the field is defined in; everything else should be exactly the same.
+    expected_field = copy(p_field)
+    expected_field.name = 'a_alt'
+    expected_field.source_class = MyChildSettings
+    assert c_field == expected_field
+
+
+def test_inherit_multiple_retrievers():
+
+    def r1(*, field: SettingsField, settings: Settings):
+            if field.name == 'a':
+                return 'a-val'
+            return None
+
+    def r2(*, field: SettingsField, settings: Settings):
+            if field.name == 'b_alt_name':
+                return True
+            return None
+
+    class MyParentSettings(Settings, retrievers=[r1, r2]):
+        # Make them fields in our Settings subclass, default value to another settings class.
+        a: str
+        b: bool = SettingsField(name="b_alt_name")
+        c: int
+
+    class MyChildSettings(MyParentSettings):
+        a: Optional[str] = SettingsField(name='a_alt')
+
+    my_child_settings = MyChildSettings.proxy()
+
+    # Get back a None because child changes the name of the settings-field to `a_alt`,
+    # so both retrievers should return None
+    assert my_child_settings.a is None
+    assert my_child_settings.b is True
+
+    with pytest.raises(SettingsValueError):
+        error_getting_non_optional_value = my_child_settings.c
+
+    my_parent_settings = MyParentSettings.proxy()
+
+    # Retriever will return a value now for this one:
+    assert my_parent_settings.a == 'a-val'
+
+    # Will still get back a value, like before:
+    assert my_parent_settings.b is True
+
+    # Error should be unchanged:
+    with pytest.raises(SettingsValueError):
+        error_getting_non_optional_value = my_parent_settings.c
