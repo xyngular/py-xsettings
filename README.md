@@ -9,7 +9,15 @@
 
 # Introduction
 
-This library is intended to house general for/iterator looping generators/utilities.
+Helps document and centralizing settings in a python project/library.
+
+Facilitates looking up Settings from `retrievers`, such as an environmental variable retriever.
+
+Converts and standardizes any retrieved values to the type-hint on the setting attribute (such as bool, int, datetime, etc).
+
+Interface to provide own custom retrievers, to grab settings/configuration from wherever you want.
+
+Retrievers can be stacked, so multiple ones can be consulted when retrieving a setting.
 
 See **[xsettings docs](https://xyngular.github.io/py-xsettings/latest/)**.
 
