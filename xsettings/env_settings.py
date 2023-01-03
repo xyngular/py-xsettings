@@ -2,7 +2,8 @@ import os
 from typing import Any
 
 from xsettings.fields import SettingsField
-from xsettings.settings import SettingsRetriever, Settings
+from xsettings.settings import Settings
+from xsettings.retreivers import SettingsRetriever
 
 
 class EnvSettingsRetriever(SettingsRetriever):
@@ -10,5 +11,5 @@ class EnvSettingsRetriever(SettingsRetriever):
         return os.environ.get(field.name)
 
 
-class EnvSettings(Settings, retrievers=EnvSettingsRetriever()):
+class EnvSettings(Settings, default_retrievers=EnvSettingsRetriever()):
     pass

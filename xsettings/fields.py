@@ -9,7 +9,8 @@ from .default_converters import DEFAULT_CONVERTERS
 from xsentinels import unwrap_union, Default
 
 if TYPE_CHECKING:
-    from .settings import Settings, SettingsRetrieverCallable, PropertyRetriever
+    from .settings import Settings
+    from .retreivers import PropertyRetriever, SettingsRetriever
 
 T = TypeVar("T")
 
@@ -101,11 +102,11 @@ class SettingsField:
     converter will always be called.
     """
 
-    retriever: 'SettingsRetrieverCallable' = None
+    retriever: 'SettingsRetriever' = None
     """
     Retriever callable to use to retrieve settings from some source.
 
-    Can be any callable that follows the `SettingsRetrieverCallable` calling interface.
+    Can be any callable that follows the `SettingsRetriever` calling interface.
     Although, subclassing `SettingsRetriever` makes things generally easier as it handles
     some of the expected default behavior for you (example: `xyn_config.config.ConfigRetriever`).
 
@@ -222,7 +223,7 @@ class SettingsField:
         # Whatever we return from this internal method is what is left on
         # the class afterwards. In this case, the original SettingsField (self).
         def wrap_property_getter_func(func):
-            from xsettings.settings import PropertyRetriever
+            from xsettings.retreivers import PropertyRetriever
             wrapped_property = property(fget=func)
             self.retriever = PropertyRetriever(wrapped_property)
             return self
@@ -499,12 +500,12 @@ def _add_field_default_from_attrs(class_attrs: Dict[str, Any], merge_field):
                         "We may support property setters in the future."
                     )
 
-                # For normal properties, we always wrap them in a PropertyRetreiver,
-                # and use that for the fields retreiver; we consider a normal property
-                # the 'retreiver' for that value. If user did not directly set the value
+                # For normal properties, we always wrap them in a PropertyRetriever,
+                # and use that for the field's retriever; we consider a normal property
+                # the 'retriever' for that value. If user did not directly set the value
                 # the retriever, ie: this PropertyRetriever will be called and it will in turn
-                # call the wrapped property to 'retreive' the value.
-                from xsettings.settings import PropertyRetriever
+                # call the wrapped property to 'retriever' the value.
+                from xsettings.retreivers import PropertyRetriever
                 field_values.retriever = PropertyRetriever(v)
             else:
                 field_values.default_value = v
@@ -540,5 +541,5 @@ def _assert_retriever_valid(field):
         return
     assert callable(field.retriever), (
         f"Invalid retriever for field {field}, needs to be callable, see "
-        f"SettingsRetrieverCallable."
+        f"SettingsRetriever."
     )

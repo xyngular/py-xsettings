@@ -10,8 +10,8 @@ from xsentinels import Default
 
 from xsettings.env_settings import EnvSettings
 from xsettings.fields import SettingsConversionError
-from xsettings.settings import Settings, SettingsField, SettingsValueError, SettingsRetriever
-from xsettings.settings import PropertyRetriever
+from xsettings.settings import Settings, SettingsField, SettingsValueError
+from xsettings.retreivers import SettingsRetriever, PropertyRetriever
 
 
 def test_set_default_value_after_settings_subclass_created():
@@ -48,7 +48,7 @@ def test_use_property_on_settings_subclass():
     class MyForwardSettings(Settings):
         my_forwarded_field: str = "my_forwarded_field-value"
 
-    class MySettings(Settings, retrievers=MyRetriever()):
+    class MySettings(Settings, default_retrievers=MyRetriever()):
         my_field = "my_field-value"
 
         @property
@@ -514,16 +514,16 @@ def test_inherit_settings_fields_from_parent_and_override_in_child():
 def test_inherit_multiple_retrievers():
 
     def r1(*, field: SettingsField, settings: Settings):
-            if field.name == 'a':
-                return 'a-val'
-            return None
+        if field.name == 'a':
+            return 'a-val'
+        return None
 
     def r2(*, field: SettingsField, settings: Settings):
-            if field.name == 'b_alt_name':
-                return True
-            return None
+        if field.name == 'b_alt_name':
+            return True
+        return None
 
-    class MyParentSettings(Settings, retrievers=[r1, r2]):
+    class MyParentSettings(Settings, default_retrievers=[r1, r2]):
         # Make them fields in our Settings subclass, default value to another settings class.
         a: str
         b: bool = SettingsField(name="b_alt_name")
@@ -553,3 +553,32 @@ def test_inherit_multiple_retrievers():
     # Error should be unchanged:
     with pytest.raises(SettingsValueError):
         error_getting_non_optional_value = my_parent_settings.c
+
+
+def test_grab_setting_values_from_parent_dependency_instances():
+    def r1(*, field: SettingsField, settings: Settings):
+        return 2 if field.name == 'c' else 'str-val'
+
+    class MySettings(Settings, default_retrievers=[r1]):
+        # Make them fields in our Settings subclass, default value to another settings class.
+        a: str
+        b: str
+        c: int
+
+    my_settings = MySettings.proxy()
+    my_settings.a = "override-a"
+
+    assert my_settings.a == 'override-a'
+    assert my_settings.b == 'str-val'
+    assert my_settings.c == 2
+
+    with MySettings(b='override-via-child-instance-b'):
+        # This value should come from the parent-instance to the one inside the above `with`
+        # (ie: the MySettings instance that is 'current' outside this `with` statement)
+        assert my_settings.a == 'override-a'
+        assert my_settings.b == 'override-via-child-instance-b'
+        assert my_settings.c == 2
+
+    assert my_settings.a == 'override-a'
+    assert my_settings.b == 'str-val'
+    assert my_settings.c == 2

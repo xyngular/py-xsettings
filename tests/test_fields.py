@@ -3,7 +3,8 @@ from typing import Any, Optional
 import pytest as pytest
 
 from xsettings.fields import SettingsField, generate_setting_fields
-from xsettings.settings import SettingsRetriever, Settings
+from xsettings.retreivers import SettingsRetriever
+from xsettings import Settings
 
 
 @pytest.mark.parametrize(
@@ -93,7 +94,7 @@ def test_property_as_retreiver():
     def my_default_retreiver(*, field: SettingsField, settings: 'Settings'):
         return f"field.name={field.name}"
 
-    class TestSettings(Settings, retrievers=[my_default_retreiver]):
+    class TestSettings(Settings, default_retrievers=[my_default_retreiver]):
         my_str_field: str
 
         @property
