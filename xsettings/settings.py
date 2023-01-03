@@ -5,7 +5,9 @@ See doc-comments for `Settings` below.
 
 """
 
-from typing import Dict, Any, Union, TypeVar, Protocol, Optional, Iterable, List, Type, TYPE_CHECKING
+from typing import (
+    Dict, Any, Union, TypeVar, Protocol, Optional, Iterable, List, Type, TYPE_CHECKING
+)
 
 from xinject import Dependency, XContext
 from xloop import xloop
