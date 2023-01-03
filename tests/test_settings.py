@@ -10,7 +10,8 @@ from xsentinels import Default
 
 from xsettings.env_settings import EnvSettings
 from xsettings.fields import SettingsConversionError
-from xsettings.settings import Settings, SettingsField, SettingsValueError
+from xsettings.settings import Settings, SettingsField
+from xsettings.errors import SettingsValueError
 from xsettings.retreivers import SettingsRetriever, PropertyRetriever
 
 
@@ -582,3 +583,14 @@ def test_grab_setting_values_from_parent_dependency_instances():
     assert my_settings.a == 'override-a'
     assert my_settings.b == 'str-val'
     assert my_settings.c == 2
+
+    def r2(*, field: SettingsField, settings: Settings):
+        if field.name == 'b':
+            return 'str-val-r2'
+
+    with MySettings(r2):
+        # These values come from the `r2` retriever, which should be checked first
+        # before the default-retriever at the Settings class level (ie: r1 further above).
+        assert my_settings.a == 'override-a'
+        assert my_settings.b == 'str-val-r2'
+        assert my_settings.c == 2

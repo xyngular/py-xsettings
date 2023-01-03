@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "xsettings"
 version = "1.0.0"
-description = "Settings, way to abstract and centeralize where settings are."
+description = "Ways to document, centeralize, retreive and validate settings."
 authors = ["Josh Orr <josh@orr.blue>"]
 packages = [{include = "xsettings"}]
 readme = "README.md"
@@ -41,6 +41,8 @@ minversion = "6.0"
 addopts = "--verbose --pycodestyle"
 testpaths = ["tests", "xsettings"]
 
+[tool.custom.xpublish]
+extra-module-docs = ['xsentinels', 'xloop', 'xinject', 'xbool']
 
 [tool.black]
 line-length = 99

@@ -12,6 +12,7 @@ from xloop import xloop
 from xsentinels import Default
 
 from xsettings.fields import generate_setting_fields, SettingsField, SettingsClassProperty
+from xsettings.errors import SettingsValueError
 
 if TYPE_CHECKING:
     from .retreivers import SettingsRetriever
@@ -25,14 +26,6 @@ __pdoc__ = {
 }
 
 
-# It's both an attribute and a value error
-# (attribute is missing and/or value has some other issue)
-# `AttributeError` helps pdoc3 know that there is no value safely
-# (ie: it will continue to generate docs).
-class SettingsValueError(ValueError, AttributeError):
-    pass
-
-
 class _SettingsMeta(type):
     """Represents the class-type instance/obj of the `Settings` class.
     Any attributes in this object will be class-level attributes of
@@ -44,7 +37,7 @@ class _SettingsMeta(type):
 
     # This will be a class-attributes on the normal `Settings` class/subclasses.
     _setting_fields: Dict[str, SettingsField]
-    _retrievers: 'List[SettingsRetriever]'
+    _default_retrievers: 'List[SettingsRetriever]'
 
     _there_is_plain_superclass: bool
     """ There is some other superclass, other then Settings/object/Dependency. """
@@ -54,9 +47,6 @@ class _SettingsMeta(type):
     Includes self/cls plus all superclasses who are Settings subclasses in __mro__
     (but not Settings it's self); in the same order that they appears in __mro__.
     """
-
-    def retrievers(cls, retriever: 'SettingsRetriever'):
-        cls._retrievers.append(retriever)
 
     def __new__(
         mcls,
@@ -337,11 +327,31 @@ class Settings(
               (Consider a explicit `fget` and `fset` attribute on SettingsField at that point)
     """
 
-    def __init__(self, **kwargs):
+    _instance_retrievers: 'List[SettingsRetriever]'
+
+    def __init__(
+            self,
+            retrievers: (
+                    'Optional[Union[List[SettingsRetriever], SettingsRetriever]]'
+            ) = None,
+            **kwargs
+    ):
         """
-        Set attributes to values that are passed via key-word arguments, these are the inital
-        values for the settings instance your creating.
+        Set attributes to values that are passed via key-word arguments, these are the initial
+        values for the settings instance your creating; they are set directly on the instance
+        as if you did this:
+
+        ```python
+        # These two statements do the same thing:
+        obj = SomeSettings(some_keyword_arg="hello")
+
+        obj = SomeSettings()
+        obj.some_keyword_arg="hello"
+
+        ```
         """
+        self._instance_retrievers = list(xloop(retrievers))
+
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -404,44 +414,7 @@ class Settings(
                     break
         try:
             if field:
-                # If we have a field, and current value is Default, or we got AttributeError,
-                # we attempt to retrieve the value via the field's retriever.
-                if not already_retrieved_normal_value or attr_error or value is Default:
-                    def self_and_parent_retrievers():
-                        for parent_class in cls._setting_subclasses_in_mro:
-                            for r in parent_class._default_retrievers:
-                                yield r
-                    for retriever in xloop(field.retriever, self_and_parent_retrievers()):
-                        value = retriever(field=field, settings=self)
-                        if value is not None:
-                            break
-
-                    if value is None:
-                        value = field.default_value
-                    if value and hasattr(value, '__get__'):
-                        value = value.__get__(self, cls)
-
-                    if value is None:
-                        if field.required:
-                            # Data-classes will print out all their fields by default, should give good info!
-                            raise SettingsValueError(f"Missing value for {field}, while retrieving value.")
-                        value = None
-
-                value = field.convert_value(value)
-
-                if value is None and field.required:
-                    raise SettingsValueError(
-                        f'Field ({field}) is required and the value we have is `None` at this point; '
-                        f'None is either directly assigned as an attribute to self or is in a '
-                        f'superclass... If you want to force Settings to attempt to retrieve the '
-                        f'value BUT you also need to have a value of some sort set on the attribute '
-                        f'in either the instance or a superclass: set the value to '
-                        f'`xsentinels.Default` instead of `None`, this value will force Settings to '
-                        f'attempt to retrieve the value (retrieval could be a property retriever on'
-                        f'your settings class, or a forward-ref to another settings class, or in the'
-                        f'case of `ConfigRetreiver`, retrieving from Config.'
-                    )
-                return value
+                return _resolve_field_value(settings=self, field=field, key=key, value=value)
         except SettingsValueError as e:
             # We had a field and could not retrieve the value, if we have not already attempted
             # to get the 'normal' value via our base-classes attributes , then attempt that;
@@ -493,5 +466,55 @@ class Settings(
 
         return value
 
+
+def _resolve_field_value(settings: Settings, field: SettingsField, key: str, value: Any):
+    cls = type(settings)
+
+    # If we have a field, and current value is Default, or we got AttributeError,
+    # we attempt to retrieve the value via the field's retriever.
+    if value is None or value is Default:
+        def self_and_parent_retrievers():
+            for r in settings._instance_retrievers:
+                yield r
+
+            for parent_settings in XContext.grab().dependency_chain(cls):
+                # skip self if we are in chain, already did it.
+                if parent_settings is settings:
+                    continue
+                for r in parent_settings._instance_retrievers:
+                    yield r
+
+            for parent_class in cls._setting_subclasses_in_mro:
+                for r in parent_class._default_retrievers:
+                    yield r
+
+        for retriever in xloop(field.retriever, self_and_parent_retrievers()):
+            value = retriever(field=field, settings=settings)
+            if value is not None:
+                break
+
+    if value is None:
+        value = field.default_value
+
+    if value is None:
+        if field.required:
+            # Data-classes will print out all their fields by default, should give good info!
+            raise SettingsValueError(f"Missing value for {field}, while retrieving value.")
+        value = None
+
+    # If value is a property, get the value from the property...
+    if value and hasattr(value, '__get__'):
+        value = value.__get__(settings, cls)
+
+    original_value = value
+    value = field.convert_value(value)
+
+    if value is None and field.required:
+        raise SettingsValueError(
+            f'Field ({field}) is required/non-optional and the value we have is '
+            f'`None` after running the converter on the originally retrieved value of '
+            f'({original_value}).'
+        )
+    return value
 
 
