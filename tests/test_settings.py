@@ -8,11 +8,11 @@ from typing import Any, Optional
 import pytest
 from xsentinels import Default
 
-from xsettings.env_settings import EnvSettings
-from xsettings.fields import SettingsConversionError
+from xsettings.env_settings import EnvVarSettings
+from xsettings.fields import SettingsConversionError, _PropertyRetriever
 from xsettings.settings import Settings, SettingsField
 from xsettings.errors import SettingsValueError
-from xsettings.retreivers import SettingsRetriever, PropertyRetriever
+from xsettings.retreivers import SettingsRetrieverProtocol
 
 
 def test_set_default_value_after_settings_subclass_created():
@@ -41,7 +41,7 @@ def test_set_default_value_after_settings_subclass_created():
 def test_use_property_on_settings_subclass():
     value_to_retrieve = "RetrievedValue"
 
-    class MyRetriever(SettingsRetriever):
+    class MyRetriever(SettingsRetrieverProtocol):
         def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
             nonlocal value_to_retrieve
             return value_to_retrieve
@@ -167,7 +167,7 @@ def test_field_overwriting():
     class MySettings(Settings):
         a: str
 
-    class MyEnvSettings(EnvSettings):
+    class MyEnvSettings(EnvVarSettings):
         b: int
 
     my_settings = MySettings.grab()
@@ -197,7 +197,7 @@ def test_field_overwriting():
 def test_field_overwriting_classlevel():
     os.environ.pop("b", None)
 
-    class KevinEnvSettings(EnvSettings):
+    class KevinEnvSettings(EnvVarSettings):
         b: int
 
     class KevinSettings(Settings):
@@ -274,7 +274,7 @@ def test_property_as_forward_ref_works_via_return_type():
     field = ASettings._setting_fields['prop_to_forward_ref']
     assert field.type_hint is str
     assert field.name == 'prop_to_forward_ref'
-    assert isinstance(field.retriever, PropertyRetriever)
+    assert isinstance(field.retriever, _PropertyRetriever)
 
 
 def test_property_as_forward_ref_works_via_annotation():
@@ -314,7 +314,7 @@ def test_property_as_forward_ref_works_via_annotation():
     field = ASettings._setting_fields['prop_to_forward_ref']
     assert field.type_hint is str
     assert field.name == 'prop_to_forward_ref'
-    assert isinstance(field.retriever, PropertyRetriever)
+    assert isinstance(field.retriever, _PropertyRetriever)
     assert isinstance(field.retriever.property_retriever, property)
     assert field.retriever.property_retriever is AProperty.prop_to_forward_ref
     assert field.default_value is None

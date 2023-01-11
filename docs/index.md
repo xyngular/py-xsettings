@@ -27,7 +27,7 @@ Retrievers can be stacked, so multiple ones can be consulted when retrieving a s
 ## Quick Start
 
 ```python
-from xsettings import EnvSettings, SettingsField
+from xsettings import EnvVarSettings, SettingsField
 from xsettings.errors import SettingsValueError
 from typing import Optional
 import dataclasses
@@ -49,7 +49,7 @@ class DBConfig:
 
 
 # Some defined settings:
-class MySettings(EnvSettings):
+class MySettings(EnvVarSettings):
     app_env: str = 'dev'
     app_version: str
     api_endpoint_url: str
@@ -111,7 +111,7 @@ assert my_settings.db_config is expected
 # since it was not set to anything else and there is no env-var for it:
 assert my_settings.app_env == 'dev'
 
-# EnvSettings (superclass) is configured to use the EnvVar retriever,
+# EnvVarSettings (superclass) is configured to use the EnvVar retriever,
 # and so it will find this in the environmental vars since it was not
 # explicitly set to anything on settings object:
 assert my_settings.app_version == '1.2.3'
@@ -204,7 +204,7 @@ to do property chaining, or you want to use a property as a property in another
 class
 
 ```python
-from xsettings import Settings, EnvSettings
+from xsettings import Settings, EnvVarSettings
 class MySettings(Settings):
     table_name: str
     
@@ -216,10 +216,10 @@ class MyTable:
         #  its asked for).
         table_name = MySettings.table_name
 
-# Inherit from EnvSettings, so it will retrieve our settings
+# Inherit from EnvVarSettings, so it will retrieve our settings
 # via environmental variables
 # (will use env-vars on-demand if value is not set directly on it).
-class MyEnvSettings(EnvSettings):
+class MyEnvSettings(EnvVarSettings):
     my_table_name: str
 
 # Example 1:
@@ -227,7 +227,7 @@ class MyEnvSettings(EnvSettings):
 #  and so now this setting will reflect what's the current value
 #  in `MyEnvSettings.my_table_name` is; and `MyEnvSettings` will
 #  retrieve its value from environmental variables
-#  since it inherits from `EnvSettings`.
+#  since it inherits from `EnvVarSettings`.
 #  
 MySettings.grab().table_name = MyEnvSettings.my_table_name
 
@@ -508,16 +508,92 @@ If you define a setter property on a Settings class, it will currently raise an 
 ## SettingsRetriever
 
 Its responsibility is providing functionality to retrieve a variable from 
-some sort of variable store. The default `xsettings.settings.SettingsRetriever`
-provides the base implementation. This implementation will always raise a 
-SettingsValueError unless `xsettings.fields.SettingsField.required` has been marked as `False`.
-Override the SettingsRetriever on a Settings class like this.
+some sort of variable store.
+
+The `xsettings.settings.SettingsRetrieverProtocol` protocol
+provides the callable protocol.
+
+You can set a default-retriever to be used as a fallback if 
+no other value is set or other non-default retrievers can't find a value
+by using a class-argument like so:
 
 ```python
 from xsettings import Settings
-class MySettings(Settings, default_retriever=MyRetriever()):
-    pass
+class MySettings(Settings, default_retrievers=my_retriever):
+    some_setting: str
 ```
+
+## How Setting Field Values Are Resolved
+
+### Summary
+
+In General, this order is how things are resolved with more detail
+to follow:
+
+1. Value set directly on Setting-subclass instance.
+   - via `MySettings.grab().some_setting = 'some-set-value`
+2. Value set on a parent-instance in `xinject.context.XContext.dependency_chain`.
+   - Settings can be used as context-managers via `with` and decorators `@`.
+   - When a new Settings instance is activated via decorator/with and previously active setting is in it's parent-chain
+     which is resolved via it's dependency-chain (`xinject.context.XContext.dependency_chain`).
+   - Example: `with MySetting(some_setting='parent-value'):`
+3. Retrievers are consulted next.
+    1. First, retriever set directly on field `xsettings.fields.SettingsField.retriever`.
+       1. This can include any field properties `@property`, they are set as the field retriever.
+    2. Next, instance retriever(s) on the Setting object being asked for it's field value is checked.
+       1. via `xsettings.settings.Settings.add_instance_retriever`.
+    3. Then instance-retrievers in the dependency-chain are checked next (see step 2 above for more details).
+    4. Finally, any default-retrievers assigned to the class(es) are checked in `mro` order.
+4. Finally, any default-value for the field is consulted.
+    - If the default-value is a property, or forward-ref then that is followed.
+
+Keep in mind that generally, if a value is a `property` (including forward-refs, which are also properties),
+they are followed via the standard `__get__` mechanism (see earlier in document for forward-ref details).
+
+### Resolution Details
+
+Values set directly on Setting instances are first checked for and used if one is found.
+Checks self first, if not found will next check `xinject.context.XContext.dependency_chain`
+(looking at each instance currently in the dependency-chain, see link for details).
+
+```python
+from xsettings import Settings, SettingsField
+
+def my_retriever(*, field: SettingsField, settings: Settings):
+    return f"retrieved-{field.name}"
+
+class MySettings(Settings, default_retrievers=my_retriever):
+    some_setting: str
+    
+assert MySettings.grab().some_setting == 'retrieved-some_setting'
+```
+
+If value can't be found the retrievers are next checked.
+
+Retrievers are tried in a specific order, the first one with a non-None retrieved value
+is the one that is used.
+
+After the individual field retrievers are consulted, instance retrievers are checked next
+before finally checking the default-retrievers for the entire class.
+
+You can also add one or more retrievers to this `instance` of settings via the
+`xsettings.setting.Settings.add_instance_retrievers` method
+(won't modify default_retrievers for the entire class, only modifies this specific instance).
+
+They are checked in the order added.
+
+Child dependencies (of the same exactly class/type) in the
+`xinject.context.XContext.dependency_chain` will also check these instance-retrievers.
+
+The dependency chain is checked in the expected order of first consulting self,
+ then the chain in most recent parent first order.
+
+For more details on how parent/child dependencies work see
+`xinject.context.XContext.dependency_chain`.
+
+After the dependency-chain is checked, the default-retrievers are checked
+in python's `mro` (method-resolution-order), checking its own class first
+before checking any super-classes for default-retrievers.
 
 ## Things to Watch Out For
 

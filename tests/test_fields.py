@@ -3,7 +3,7 @@ from typing import Any, Optional
 import pytest as pytest
 
 from xsettings.fields import SettingsField, generate_setting_fields
-from xsettings.retreivers import SettingsRetriever
+from xsettings.retreivers import SettingsRetrieverProtocol
 from xsettings import Settings
 
 
@@ -82,7 +82,7 @@ def test_verify_retriever_on_normal_field():
             _private = None
 
 
-class Retriever(SettingsRetriever):
+class Retriever(SettingsRetrieverProtocol):
     def get(self, field: SettingsField, *, settings: Settings) -> Any:
         pass
 

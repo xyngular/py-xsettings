@@ -1,23 +1,57 @@
 from xsentinels.sentinel import Sentinel
-from typing import Any, Protocol
+from typing import Any, Protocol, Callable
 from .settings import SettingsField, Settings
+import os
+
+# Tell pdoc3 to document the normally private method __call__.
+__pdoc__ = {
+    "SettingsRetrieverProtocol.__call__": True,
+}
 
 
-# class TryNextRetriever(Sentinel):
-#     pass
-
-
-# todo: remove use of `SettingsRetrieverCallable`
-
-class SettingsRetriever(Protocol):
-
+class SettingsRetrieverProtocol(Protocol):
     """
-    The purpose of the base SettingsRetrieverCallable is to define the base-interface for
+    The purpose of the base SettingsRetrieverProtocol is to define the base-interface for
     retrieving settings values.
 
-    The retriever can be any callable, by default `xsettings.settings.Settings` will use
-    an instance of `SettingsRetriever`. It provides a default retriever implementation,
-    see that class for more details on what happens by default.
+    The retriever can be any callable, by default `xsettings.settings.Settings` will
+    not use a default retriever; normally a subclass or some sort of generic
+    base-subclass of `xsettings.settings.Settings` will be used to specify a default
+    retriever to use.
+
+    A retriever can also be specified per-field via `xsettings.fields.SettingsField.retriever`.
+
+    Retrievers are tried in a specific order, the first one with a non-None retrieved value
+    is the one that is used.
+
+    You can also add one or more retrievers to this `instance` of settings via the
+    `xsettings.setting.Settings.add_instance_retrievers` method
+    (won't modify default_retrievers for the entire class, only modifies this specific instance).
+
+    .. note:: As a side-note, values set directly on Setting instances are first checked for and
+        used if one is found.
+        Checks self first, if not found will next check `xinject.context.XContext.dependency_chain`
+        (looking at each instance currently in the dependency-chain, see link for details).
+
+        If value can't be found the retrievers are next checked.
+
+    After the individual field retrievers are consulted, instance retrievers are checked next
+    before finally checking the default-retrievers for the entire class.
+
+    They are checked in the order added.
+
+    Child dependencies (of the same exactly class/type) in the
+    `xinject.context.XContext.dependency_chain` will also check these instance-retrievers.
+
+    The dependency chain is checked in the expected order of first consulting self,
+     then the chain in most recent parent first order.
+
+    For more details on how parent/child dependencies work see
+    `xinject.context.XContext.dependency_chain`.
+
+    After the dependency-chain is checked, the default-retrievers are checked
+    in python's `mro` (method-resolution-order), checking its own class first
+    before checking any super-classes for default-retrievers.
     """
 
     def __call__(self, *, field: SettingsField, settings: Settings) -> Any:
@@ -40,19 +74,19 @@ class SettingsRetriever(Protocol):
         )
 
 
-class PropertyRetriever(SettingsRetriever):
-    """
-    What is used to wrap a `@property` on a Settings subclass.
-    We don't use the default retriever for any defined properties on a Settings subclass,
-    we instead use `PropertyRetriever`; as the property it's self is considered the 'retriever'.
-
-    Will first check the property getter function when retrieving a value before
-    doing anything else (such as using the default_value for the field, etc, etc).
-    """
-    property_retriever: property
-
-    def __init__(self, property_retriever: property):
-        self.property_retriever = property_retriever
-
+class EnvVarRetriever(SettingsRetrieverProtocol):
+    """ Used to  """
     def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
-        return self.property_retriever.__get__(settings, type(settings))
+        environ = os.environ
+
+        # First try to get field using the same case as the original field name:
+        value = environ.get(field.name, None)
+        if value is not None:
+            return value
+
+        # If we did not get any value back (not even a blank-string),
+        # attempt lookup by upper-casing the name
+        # (as upper-case is extremely common for env-vars):
+        return environ.get(field.name.upper())
+
+

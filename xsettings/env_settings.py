@@ -1,15 +1,24 @@
-import os
-from typing import Any
-
-from xsettings.fields import SettingsField
 from xsettings.settings import Settings
-from xsettings.retreivers import SettingsRetriever
+from .retreivers import EnvVarRetriever
 
 
-class EnvSettingsRetriever(SettingsRetriever):
-    def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
-        return os.environ.get(field.name)
+class EnvVarSettings(Settings, default_retrievers=EnvVarRetriever()):
+    """
+    Base subclass of `xsettings.settings.Settings` with the default retriever
+    set as the `xsettings.retrievers.EnvVarRetriever`.
 
+    This means when a settings field is defined without a retriever
+    it will use the `xsettings.retrievers.EnvVarRetriever` by default to retriever its value.
 
-class EnvSettings(Settings, default_retrievers=EnvSettingsRetriever()):
+    The `xsettings.retrievers.EnvVarRetriever` will check `os.environ` dict for the values.
+
+    It first tries with the plain name of the field.
+
+    If a value is not found (not even an empty string) it will next try looking up the env-var
+    by upper-casing the name
+    (as it's extremely common to use all upper-case vars for environmental var names).
+
+    If it still can't be found then None will be returned and the system will look
+    at the next retriever and/or the default value for the field as necessary/needed.
+    """
     pass

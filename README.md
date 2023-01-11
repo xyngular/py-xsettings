@@ -38,7 +38,7 @@ poetry add xsettings
 # Quick Start
 
 ```python
-from xsettings import EnvSettings, SettingsField
+from xsettings import EnvVarSettings, SettingsField
 from xsettings.errors import SettingsValueError
 from typing import Optional
 import dataclasses
@@ -60,7 +60,7 @@ class DBConfig:
 
 
 # Some defined settings:
-class MySettings(EnvSettings):
+class MySettings(EnvVarSettings):
     app_env: str = 'dev'
     app_version: str
     api_endpoint_url: str
@@ -122,7 +122,7 @@ assert my_settings.db_config is expected
 # since it was not set to anything else and there is no env-var for it:
 assert my_settings.app_env == 'dev'
 
-# EnvSettings (superclass) is configured to use the EnvVar retriever,
+# EnvVarSettings (superclass) is configured to use the EnvVar retriever,
 # and so it will find this in the environmental vars since it was not
 # explicitly set to anything on settings object:
 assert my_settings.app_version == '1.2.3'

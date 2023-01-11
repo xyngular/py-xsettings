@@ -10,7 +10,7 @@ from xsentinels import unwrap_union, Default
 
 if TYPE_CHECKING:
     from .settings import Settings
-    from .retreivers import PropertyRetriever, SettingsRetriever
+    from .retreivers import SettingsRetrieverProtocol
 
 T = TypeVar("T")
 
@@ -29,6 +29,29 @@ class SettingsClassProperty(Generic[T]):
 
     def __get__(self, owner_self, owner_cls) -> T:
         return self.fget(owner_cls)
+
+
+class _PropertyRetriever:
+    """
+    Special case, internally used retriever only assigned to individual fields
+    (and not as a default retriever for the entire Settings subclass).
+
+    What is used to wrap a `@property` on a Settings subclass.
+    We don't use the default retriever for any defined properties on a Settings subclass,
+    we instead use `PropertyRetriever`; as the property it's self is considered the 'retriever'.
+
+    Will check the property getter function to retrieve the value by calling its
+    `__get__()` method, passing the settings object involved as the
+    object/type the property is getting a value for; just like any other
+    normal property would have happened when the value is asked for.
+    """
+    property_retriever: property
+
+    def __init__(self, property_retriever: property):
+        self.property_retriever = property_retriever
+
+    def __call__(self, *, field: 'SettingsField', settings: 'Settings') -> Any:
+        return self.property_retriever.__get__(settings, type(settings))
 
 
 @dataclasses.dataclass
@@ -102,46 +125,25 @@ class SettingsField:
     converter will always be called.
     """
 
-    retriever: 'SettingsRetriever' = None
+    retriever: 'SettingsRetrieverProtocol' = None
     """
     Retriever callable to use to retrieve settings from some source.
 
-    Can be any callable that follows the `SettingsRetriever` calling interface.
-    Although, subclassing `SettingsRetriever` makes things generally easier as it handles
-    some of the expected default behavior for you (example: `xyn_config.config.ConfigRetriever`).
+    Can be any callable that follows the `xsettings.retriever.SettingsRetrieverProtocol` calling
+    interface.
 
-    By default, it's the Settings subclass parameter `default_retriever`.
+    System will try this retriever first (if set to something),
+    before trying other retrievers such as instance-retrievers
+    `xsettings.settings.Settings.add_instance_retrievers`
+    or default-retrievers `xsettings.settings.Settings.__init_subclass__`.
+
+    See those links for more details (such as how dependency-chain and mro parents are resolved
+    when looking for other retrievers).
 
     Example:
 
     >>> class MySettings(default_retriever=MyRetriever())
     ...     my_field: str  # <-- will use `MyRetriever` instance for it's retriever
-
-
-    If `default_retriever` is not set/provided by the subclass (on subclass creation)
-    via it's class parameters, then by default an instance of
-    `xsettings.settings.SettingsRetriever` is used.
-
-    The class `SettingsRetriever` has basic logic in it that handles:
-
-    - Default values
-        - Includes handling default values that are properties (by calling their `__get__` method).
-    - Missing values
-        - Checks if the field is required and raises an appropriate error if needed.
-
-    As a side-note on using xyn-settings with xyn-config.
-
-    There is also a specialized subclass called `ConfigRetriever` class in `xyn-config` that
-    can automatically handle retrieving values from the current `Config` object for you
-    based on the `SettingsField.name`.
-
-    The `ConfigSettings` in the same library has `ConfigRetriever` set to be the default one
-    for you. So you can inherit from `ConfigSettings` to get a Settings subclass that
-    can automatically grab values from Config for you.
-
-    If the value is not in Config, it would still fallback to the `SettingsField.default_value`,
-    like you would expect (including looking to see if the default_value is a property and
-    calling it's `__get__` method if it is).
     """
 
     default_value: Any = None
@@ -156,7 +158,8 @@ class SettingsField:
     The default_value is a fall-back value that is used as a last-restort if the setting is
     not set to anything and/or can't be retrieved.
 
-    Used by SettingsRetriever and it's subclasses (such as ConfigRetriever from xyn-config).
+    Used by `xsettings.retriever.SettingsRetrieverProtocol` and it's subclasses
+    (such as ConfigRetriever from xyn-config).
 
     The default value can also be a property object
     (such as forward-reference from another Settings class).
@@ -223,9 +226,8 @@ class SettingsField:
         # Whatever we return from this internal method is what is left on
         # the class afterwards. In this case, the original SettingsField (self).
         def wrap_property_getter_func(func):
-            from xsettings.retreivers import PropertyRetriever
             wrapped_property = property(fget=func)
-            self.retriever = PropertyRetriever(wrapped_property)
+            self.retriever = _PropertyRetriever(wrapped_property)
             return self
 
         return wrap_property_getter_func
@@ -500,13 +502,12 @@ def _add_field_default_from_attrs(class_attrs: Dict[str, Any], merge_field):
                         "We may support property setters in the future."
                     )
 
-                # For normal properties, we always wrap them in a PropertyRetriever,
+                # For normal properties, we always wrap them in a _PropertyRetriever,
                 # and use that for the field's retriever; we consider a normal property
                 # the 'retriever' for that value. If user did not directly set the value
-                # the retriever, ie: this PropertyRetriever will be called and it will in turn
+                # the retriever, ie: this _PropertyRetriever will be called and it will in turn
                 # call the wrapped property to 'retriever' the value.
-                from xsettings.retreivers import PropertyRetriever
-                field_values.retriever = PropertyRetriever(v)
+                field_values.retriever = _PropertyRetriever(v)
             else:
                 field_values.default_value = v
         else:
@@ -541,5 +542,5 @@ def _assert_retriever_valid(field):
         return
     assert callable(field.retriever), (
         f"Invalid retriever for field {field}, needs to be callable, see "
-        f"SettingsRetriever."
+        f"SettingsRetrieverProtocol."
     )

@@ -1,6 +1,6 @@
 
 def test_quick_start_readme_example():
-    from xsettings import EnvSettings, SettingsField
+    from xsettings import EnvVarSettings, SettingsField
     from xsettings.errors import SettingsValueError
     from typing import Optional
     import dataclasses
@@ -20,7 +20,7 @@ def test_quick_start_readme_example():
         password: str
 
     # Some defined settings:
-    class MySettings(EnvSettings):
+    class MySettings(EnvVarSettings):
         app_env: str = 'dev'
         app_version: str
         api_endpoint_url: str
@@ -123,3 +123,15 @@ def test_quick_start_readme_example():
         assert True
     else:
         assert False
+
+
+def test_index_doc_example():
+    from xsettings import Settings, SettingsField
+
+    def my_retriever(*, field: SettingsField, settings: Settings):
+        return f"retrieved-{field.name}"
+
+    class MySettings(Settings, default_retrievers=my_retriever):
+        some_setting: str
+
+    assert MySettings.grab().some_setting == 'retrieved-some_setting'

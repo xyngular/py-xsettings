@@ -17,15 +17,12 @@ from xsettings.fields import generate_setting_fields, SettingsField, SettingsCla
 from xsettings.errors import SettingsValueError
 
 if TYPE_CHECKING:
-    from .retreivers import SettingsRetriever
+    from .retreivers import SettingsRetrieverProtocol
 
 T = TypeVar("T")
 
-# Tell pdoc3 to document the normally private method __call__.
-__pdoc__ = {
-    "SettingsRetrieverCallable.__call__": True,
-    "SettingsRetriever.__call__": True,
-}
+
+RetrieverOrList = 'Union[SettingsRetrieverProtocol, Iterable[SettingsRetrieverProtocol]]'
 
 
 class _SettingsMeta(type):
@@ -39,7 +36,7 @@ class _SettingsMeta(type):
 
     # This will be a class-attributes on the normal `Settings` class/subclasses.
     _setting_fields: Dict[str, SettingsField]
-    _default_retrievers: 'List[SettingsRetriever]'
+    _default_retrievers: 'List[SettingsRetrieverProtocol]'
 
     _there_is_plain_superclass: bool
     """ There is some other superclass, other then Settings/object/Dependency. """
@@ -56,7 +53,7 @@ class _SettingsMeta(type):
         bases,
         attrs: Dict[str, Any],
         *,
-        default_retrievers: 'Union[SettingsRetriever, Iterable[SettingsRetriever]]' = None,
+        default_retrievers: RetrieverOrList = None,
         skip_field_generation: bool = False,
         **kwargs,
     ):
@@ -329,12 +326,12 @@ class Settings(
               (Consider a explicit `fget` and `fset` attribute on SettingsField at that point)
     """
 
-    _instance_retrievers: 'List[SettingsRetriever]'
+    _instance_retrievers: 'List[SettingsRetrieverProtocol]'
 
     def __init__(
             self,
             retrievers: (
-                    'Optional[Union[List[SettingsRetriever], SettingsRetriever]]'
+                    'Optional[Union[List[SettingsRetrieverProtocol], SettingsRetrieverProtocol]]'
             ) = None,
             **kwargs
     ):
@@ -356,6 +353,44 @@ class Settings(
 
         for k, v in kwargs.items():
             setattr(self, k, v)
+
+    def add_instance_retrievers(
+            self, retrievers: 'Union[List[SettingsRetrieverProtocol], SettingsRetrieverProtocol]'
+    ):
+        """
+        You can add one or more retrievers to this `instance` of settings
+        (won't modify default_retrievers for the entire class, only modifies this specific
+        instance).
+
+        Directly set values are first checked for in self, and next in
+        `xinject.context.XContext.dependency_chain`
+        (looking at each instance currently in the dependency-chain, see link for details).
+
+        If value can't be found the retrievers are next checked.
+
+        After the individual field retrievers are consulted, instance retrievers are checked next
+        before finally checking the default-retrievers for the entire class.
+
+        They are checked in the order added.
+
+        Child dependencies (of the same exactly class/type) in the
+        `xinject.context.XContext.dependency_chain` will also check these instance-retrievers.
+
+        The dependency chain is checked in the expected order of first consulting self,
+         then the chain in most recent parent first order.
+
+        For more details on how parent/child dependencies work see
+        `xinject.context.XContext.dependency_chain`.
+
+        After the dependency-chain is checked, the default-retrievers are checked
+        in python's `mro` (method-resolution-order), checking its own class first
+        before checking any super-classes for default-retrievers.
+
+        Args:
+            retrievers (Union[List[SettingsRetrieverProtocol], SettingsRetrieverProtocol]): The
+                retriever(s) to add to the instance.
+        """
+        self._instance_retrievers.extend(xloop(retrievers))
 
     def __getattribute__(self, key):
         if key.startswith("_"):
@@ -418,6 +453,9 @@ class Settings(
             if field:
                 return _resolve_field_value(settings=self, field=field, key=key, value=value)
         except SettingsValueError as e:
+            # todo: Do some sort of refactoring/splitting this out of this method
+            #       (starting to get too large).
+
             # We had a field and could not retrieve the value, if we have not already attempted
             # to get the 'normal' value via our base-classes attributes , then attempt that;
             # If there is a plain class in are superclass/base-classes (ie: non-Setting)
