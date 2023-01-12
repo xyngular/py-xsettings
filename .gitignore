@@ -3,7 +3,9 @@
 
 # For now just ignore all .idea/ files,
 # you can always explicitly add them in.
-.idea
+/.idea
+
+/docs/api
 
 # User-specific stuff
 .idea/**/workspace.xml

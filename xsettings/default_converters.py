@@ -46,3 +46,7 @@ DEFAULT_CONVERTERS: Dict[Type, Callable[[Any], Any]] = {
     dt.datetime: to_datetime,
     bool: to_bool,
 }
+"""
+Map of a basic type to it's default converter function;
+used by settings to convert to/from basic types.
+"""

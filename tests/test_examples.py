@@ -125,6 +125,134 @@ def test_quick_start_readme_example():
         assert False
 
 
+def test_class_lazy_attr_forward_ref():
+    from xsettings import Settings, EnvVarSettings
+    import os
+
+    class MySettings(Settings):
+        table_name: str
+
+    MySettings.grab().table_name = "the-t-name"
+
+    class MyTable:
+        class Meta:
+            #  Here, we set a forward-ref class property
+            #  to be whatever the current setting of `MySettings.table_name`
+            #  will be (it's a property and will look it up each time
+            #  its asked for).
+            table_name = MySettings.table_name
+
+    # Forward-ref is resolved via lazy-forward-ref,
+    # each time it's asked for:
+    assert MyTable.Meta.table_name == 'the-t-name'
+
+    with MySettings(table_name='alt-table-name'):
+        assert MyTable.Meta.table_name == 'alt-table-name'
+
+    # Inherit from EnvVarSettings, so it will retrieve our settings
+    # via environmental variables
+    # (will use env-vars on-demand if value is not set directly on it).
+    class MyEnvSettings(EnvVarSettings):
+        my_table_name: str
+
+    os.environ['MY_TABLE_NAME'] = 'env-table-name'
+
+    #  We can directly set the setting on MySettings to a lazy-prop-ref
+    #  and so now this setting will reflect what's the current value
+    #  in `MyEnvSettings.my_table_name` is; and `MyEnvSettings` will
+    #  retrieve its value from environmental variables
+    #  since it inherits from `EnvVarSettings`.
+    #
+    MySettings.grab().table_name = MyEnvSettings.my_table_name
+
+    assert MySettings.grab().table_name == 'env-table-name'
+
+    # Example 3, default value of settings field can be a lazy-property-ref
+    class MyOtherSettings(Settings):
+        my_setting_attr: str = MyEnvSettings.my_table_name
+
+    my_other_settings = MyOtherSettings.proxy()
+    assert my_other_settings.my_setting_attr == 'env-table-name'
+
+    os.environ['MY_TABLE_NAME'] = 'env-table-2'
+    assert my_other_settings.my_setting_attr == 'env-table-2'
+
+
+def test_change_default_example():
+    from xsettings import Settings, SettingsField
+
+    class MySettings(Settings):
+        a: int
+        b: int = 1
+
+    # Change default value later on;
+    # Now the `MySettings.a` will have a
+    # default/fallback value of `2`:
+    MySettings.a = 2
+
+    class MyOtherSettings(Settings):
+        some_other_setting: str
+
+    # You can also set a lazy-ref as setting field's
+    # default value after it's class is created.
+    # (also if the type-hint's don't match it will convert
+    #  the value as needed like you would expect.
+    MyOtherSettings.some_other_setting = MySettings.b
+
+    # It's a str now, since `MyOtherSettings.some_other_setting`
+    # has a str typehint:
+    assert MyOtherSettings.grab().some_other_setting == '1'
+
+
+def test_read_only_props_1():
+    from xsettings import Settings
+    from decimal import Decimal
+
+    class MySettings(Settings):
+        @property
+        def some_setting(self) -> Decimal:
+            return "1.34"
+
+    assert MySettings.grab().some_setting == Decimal("1.34")
+
+
+def test_read_only_props_2():
+    from xsettings import Settings
+    from decimal import Decimal
+
+    class MySettings(Settings):
+        # Does not matter if this is before or after the property,
+        # Python stores type annotations in a separate area vs
+        # normal class attribute values in Python.
+        some_setting: Decimal
+
+        @property
+        def some_setting(self):
+            return "1.34"
+
+    assert MySettings.grab().some_setting == Decimal("1.34")
+
+
+def test_forward_ref_example():
+    from xsettings import Settings
+    from decimal import Decimal
+
+    class MySettings(Settings):
+        # Does not matter if this is before or after the property,
+        # Python stores type annotations in a separate area
+        # vs normal class attribute values in Python.
+        some_setting: Decimal
+
+        @property
+        def some_setting(self) -> Decimal:
+            return "1.34"
+
+    class OtherSettings(Settings):
+        other_setting: str = MySettings.some_setting
+
+    assert OtherSettings.grab().other_setting == "1.34"
+
+
 def test_index_doc_example():
     from xsettings import Settings, SettingsField
 

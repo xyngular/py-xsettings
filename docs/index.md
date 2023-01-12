@@ -157,14 +157,15 @@ else:
 ```
 
 
-# Settings Library
+# Overview
 
-The settings library is seperated into a few core components. 
+The settings library is seperated into a few core components.
+
 - Settings
 - SettingsField
-- SettingsRetriever
+- SettingsRetrieverProtocol
 
-## Settings
+# Settings
 
 This is the core class that Settings implementations will inherit from.
 Settings can be used as source for external settings / variables that a given 
@@ -194,9 +195,9 @@ default_value) will be reflected in the SettingsField. If you want more
 customization you can set a SettingsField() as your default value and the
 fields set in that will be overridden in the main SettingsField object.
 
-### Settings usage
+## Settings usage
 
-#### Class/Lazy Attribute Lookup
+### Class/Lazy Attribute Lookup
 
 Referencing the attribute at the class level will return a `SettingsClassProperty`
 rather than a SettingsField (or the default value). This is useful when you want
@@ -205,8 +206,13 @@ class
 
 ```python
 from xsettings import Settings, EnvVarSettings
+import os
+
+
 class MySettings(Settings):
     table_name: str
+
+MySettings.grab().table_name = "the-t-name"
     
 class MyTable:
     class Meta:
@@ -216,13 +222,21 @@ class MyTable:
         #  its asked for).
         table_name = MySettings.table_name
 
+# Forward-ref is resolved via lazy-forward-ref,
+# each time it's asked for:
+assert MyTable.Meta.table_name == 'the-t-name'
+
+with MySettings(table_name='alt-table-name'):
+    assert MyTable.Meta.table_name == 'alt-table-name'
+
 # Inherit from EnvVarSettings, so it will retrieve our settings
 # via environmental variables
 # (will use env-vars on-demand if value is not set directly on it).
 class MyEnvSettings(EnvVarSettings):
     my_table_name: str
 
-# Example 1:
+os.environ['MY_TABLE_NAME'] = 'env-table-name'
+
 #  We can directly set the setting on MySettings to a lazy-prop-ref
 #  and so now this setting will reflect what's the current value
 #  in `MyEnvSettings.my_table_name` is; and `MyEnvSettings` will
@@ -231,12 +245,21 @@ class MyEnvSettings(EnvVarSettings):
 #  
 MySettings.grab().table_name = MyEnvSettings.my_table_name
 
+assert MySettings.grab().table_name == 'env-table-name'
+
 # Example 3, default value of settings field can be a lazy-property-ref
 class MyOtherSettings(Settings):
     my_setting_attr: str = MyEnvSettings.my_table_name
+
+my_other_settings = MyOtherSettings.proxy()
+assert my_other_settings.my_setting_attr == 'env-table-name'
+
+os.environ['MY_TABLE_NAME'] = 'env-table-2'
+assert my_other_settings.my_setting_attr == 'env-table-2'
+
 ```
 
-#### Change Default Value
+### Change Default Value
 
 You can now (as of v1.3) change the default value on an already created Settings subclass:
 
@@ -261,11 +284,12 @@ class MyOtherSettings(Settings):
 #  the value as needed like you would expect.
 MyOtherSettings.some_other_setting = MySettings.b
 
-# It's a str now, since `MyOtherSettings.some_other_setting` has a str typehint:
+# It's a str now, since `MyOtherSettings.some_other_setting`
+# has a str typehint:
 assert MyOtherSettings.grab().some_other_setting == '1'
 ```
 
-#### Setting New Setting on Class Attributes
+### Setting New Setting on Class Attributes
 
 You can't create new settings attributes/fields on a Settings subclass after the class
 is created (only during class creation).
@@ -273,7 +297,7 @@ is created (only during class creation).
 You can set/change the default value for an existing settings attribute by simply assigning
 to it as a class attribute (see topic [Change Default Value](#change-default-value)).
 
-#### Class Instance Attribute lookup
+### Class Instance Attribute lookup
 
 Setting classes inherit from `1xinject.Dependency` and as such are considered singletons.
 Instances should not be created. Instead, to access an instance you should do
@@ -285,9 +309,10 @@ my_settings = MySettings.proxy()
 # Can use `my_settings` just like `MySettings.grab().table_name`,
 print(my_settings.table_name)
 
-# You can also import the `my_settings` proxy into other modules, for use elsewhere.
+# You can also import the `my_settings` proxy into other modules,
+# for use elsewhere.
 from my_project.settings import my_settings
-print(my_settings.table_`name)
+print(my_settings.table_name)
 ```
 
 Proxies are directly importable into other files, the proxy will lookup the current
@@ -298,7 +323,7 @@ To lookup the value of a given settings simply reference it on the Singleton
 instance via `MySettings.grab().table_name`. This will cause a lookup
 to happen.
 
-#### Inheriting from Plain Classes
+### Inheriting from Plain Classes
 
 Currently, there is a something to watch out for when you also inherit from a plain class
 for you Settings subclass.
@@ -316,7 +341,7 @@ assigned to self, then and retrieved value, then any plain super-class set value
 
 (For a more clear example of this, see unit test method `test_super_class_with_default_value_uses_retriever`)
 
-## SettingsField
+# SettingsField
 
 Provides value lookup configuration and functionality. It controls
 how a source value is retrieved `xsettings.fields.SettingsField.retriever` and
@@ -327,7 +352,7 @@ then it's just a normal attribute.
 
 No special features of the Settings class such as lazy/forward-references will work with them.
 
-### How SettingsField is Generated
+## How SettingsField is Generated
 
 Right now, a SettingsField is only automatically generated for annotated attributes.
 
@@ -375,7 +400,7 @@ class MySettings(Settings):
         pass
 ```
 
-## Converters
+# Converters
 
 When Settings gets a value due to someone asking for an attribute on it's self, it will
 attempt to convert the value if the value does not match the type-hint.
@@ -383,17 +408,19 @@ attempt to convert the value if the value does not match the type-hint.
 To find a converter, we check these in order, first one found is what we use:
 
 1. We first check `self.converter`.
-2. Next, `xsettings.default_converters.DEFAULT_CONVERTERS`.
-3. Finally, we fall-back to using the type-hint (ie: `int(value)` or `str(value)`).
+2. Next, [`DEFAULT_CONVERTERS`](api/xsettings/default_converters.html#xsettings.default_converters.DEFAULT_CONVERTERS){target=_blank}
+3. Finally, we fall back to using the type-hint (ie: `int(value)` or `str(value)`).
+    - This also enables types that inherit from `Enum` to work:  
+      ie: plain values will be converted into one of the enum's values.
 
-If the retreived value does not amtch the type-hint, it will run the converter by calling
+If the retrieved value does not match the type-hint, it will run the converter by calling
 it and passing the value to convert. The value to convert is whatever value was set,
-retreived. It can also be the field's default-value if noting is set/retreived.
+retrieved. It can also be the field's default-value if noting is set/retreived.
 
 
-## Properties
+# Properties
 
-### Supports Read-Only Properties
+## Supports Read-Only Properties
 
 The Settings class also supports read-only properties, they are placed in a SettingField's
 retriever (ie: `xsettings.fields.SettingField.retriever`).
@@ -437,7 +464,8 @@ from decimal import Decimal
 
 class MySettings(Settings):
     # Does not matter if this is before or after the property,
-    # Python stores type annotations in a separate area vs normal class attribute values in Python.
+    # Python stores type annotations in a separate area
+    # vs normal class attribute values in Python.
     some_setting: Decimal
     
     @property
@@ -447,7 +475,7 @@ class MySettings(Settings):
 assert MySettings.grab().some_setting == Decimal("1.34")
 ```
 
-### Getter Properties Supported as a Forward/Lazy-Reference
+## Getter Properties Supported as a Forward/Lazy-Reference
 
 You can get a forward-ref for a property field on a Settings class,
 just like any other field attribute on a Settings class:
@@ -458,7 +486,8 @@ from decimal import Decimal
 
 class MySettings(Settings):
     # Does not matter if this is before or after the property,
-    # Python stores type annotations in a separate area vs normal class attribute values in Python.
+    # Python stores type annotations in a separate area
+    # vs normal class attribute values in Python.
     some_setting: Decimal
     
     @property
@@ -476,7 +505,7 @@ to the type-hint assigned to the field. It's still converted as you would expect
 in this case we convert a Decimal object into a str object when the value for
 `other_setting` is asked for.
 
-### Getter Property with Custom SettingsField
+## Getter Property with Custom SettingsField
 
 You can also specify a custom SettingsField and still use a property with it.
 Below is an example. See `xsettings.fields.SettingsField.getter` for more details.
@@ -485,7 +514,8 @@ Below is an example. See `xsettings.fields.SettingsField.getter` for more detail
 from xsettings import Settings, SettingsField
 class MySettings(Settings):
     # Does not matter if this is before or after the property,
-    # Python stores type annotations in a separate area vs normal class attribute values in
+    # Python stores type annotations in a separate area
+    # vs normal class attribute values in
     # Python.
     some_setting: str = SettingsField(required=False)
 
@@ -497,7 +527,7 @@ assert MySettings.grab().some_setting == "1.36"
 ```
 
 
-### Setter Properties Currently Unsupported
+## Setter Properties Currently Unsupported
 
 You can't currently have a setter defined for a property on a class.
 This is something we CAN support without too much trouble, but have decided to
@@ -505,12 +535,13 @@ put off for a future, if we end up wanting to do it.
 
 If you define a setter property on a Settings class, it will currently raise an error.
 
-## SettingsRetriever
+# SettingsRetriever
 
 Its responsibility is providing functionality to retrieve a variable from 
 some sort of variable store.
 
-The `xsettings.settings.SettingsRetrieverProtocol` protocol
+The
+[`SettingsRetrieverProtocol`](api/xsettings/retreivers.html#xsettings.retreivers.SettingsRetrieverProtocol){target=_blank}
 provides the callable protocol.
 
 You can set a default-retriever to be used as a fallback if 
@@ -523,38 +554,42 @@ class MySettings(Settings, default_retrievers=my_retriever):
     some_setting: str
 ```
 
-## How Setting Field Values Are Resolved
+# How Setting Field Values Are Resolved
 
-### Summary
+## Summary
 
 In General, this order is how things are resolved with more detail
 to follow:
 
 1. Value set directly on Setting-subclass instance.
    - via `MySettings.grab().some_setting = 'some-set-value`
-2. Value set on a parent-instance in `xinject.context.XContext.dependency_chain`.
+2. Value set on a parent-instance in [`XContext.dependency_chain(for_type=SettingsSubclass)`](api/xinject/context.html#xinject.context.XContext.dependency_chain){target=_blank}.
    - Settings can be used as context-managers via `with` and decorators `@`.
    - When a new Settings instance is activated via decorator/with and previously active setting is in it's parent-chain
-     which is resolved via it's dependency-chain (`xinject.context.XContext.dependency_chain`).
+     which is resolved via it's dependency-chain
+     ([`XContext.grab().dependency_chain(for_type=SettingsSubclass)`](api/xinject/context.html#xinject.context.XContext.dependency_chain){target=_blank}).
    - Example: `with MySetting(some_setting='parent-value'):`
 3. Retrievers are consulted next.
     1. First, retriever set directly on field `xsettings.fields.SettingsField.retriever`.
        1. This can include any field properties `@property`, they are set as the field retriever.
-    2. Next, instance retriever(s) on the Setting object being asked for it's field value is checked.
-       1. via `xsettings.settings.Settings.add_instance_retriever`.
-    3. Then instance-retrievers in the dependency-chain are checked next (see step 2 above for more details).
-    4. Finally, any default-retrievers assigned to the class(es) are checked in `mro` order.
+    2. Next, instance retriever(s) set directly on the Setting object that is being asked for its field value is checked.
+       1. via [`Settings.add_instance_retrievers`](api/xsettings/settings.html#xsettings.settings.Settings.add_instance_retrievers){target=_blank}.
+    3. Then any instance-retrievers in the dependency-chain are checked next (see step 2 above for more details).
+    4. Default-retrievers assigned to the class(es) are next checked, in `mro` order.
 4. Finally, any default-value for the field is consulted.
     - If the default-value is a property, or forward-ref then that is followed.
+      - ie: `Settings.some_attr = OtherSettings.another_attr_to_forward_ref_with`
+      - This ^ will change the default value for `some_attr` to a forward-ref from another Settings class.
 
 Keep in mind that generally, if a value is a `property` (including forward-refs, which are also properties),
 they are followed via the standard `__get__` mechanism (see earlier in document for forward-ref details).
 
-### Resolution Details
+## Resolution Details
 
 Values set directly on Setting instances are first checked for and used if one is found.
-Checks self first, if not found will next check `xinject.context.XContext.dependency_chain`
-(looking at each instance currently in the dependency-chain, see link for details).
+Checks self first, if not found will next check
+[`XContext.grab().dependency_chain(for_type=SettingsSubclass)`](api/xinject/context.html#xinject.context.XContext.dependency_chain){target=_blank}
+(returns a list of each instance currently in the dependency-chain, each one is checked in order; see link for details).
 
 ```python
 from xsettings import Settings, SettingsField
@@ -577,25 +612,26 @@ After the individual field retrievers are consulted, instance retrievers are che
 before finally checking the default-retrievers for the entire class.
 
 You can also add one or more retrievers to this `instance` of settings via the
-`xsettings.setting.Settings.add_instance_retrievers` method
-(won't modify default_retrievers for the entire class, only modifies this specific instance).
+[`Settings.add_instance_retrievers`](api/xsettings/settings.html#xsettings.settings.Settings.add_instance_retrievers){target=_blank}
+method (won't modify default_retrievers for the entire class, only modifies this specific instance).
 
 They are checked in the order added.
 
 Child dependencies (of the same exactly class/type) in the
-`xinject.context.XContext.dependency_chain` will also check these instance-retrievers.
+[`XContext.dependency_chain(for_type=SettingsSubclass)`](api/xinject/context.html#xinject.context.XContext.dependency_chain){target=_blank}
+will also check these instance-retrievers.
 
 The dependency chain is checked in the expected order of first consulting self,
  then the chain in most recent parent first order.
 
 For more details on how parent/child dependencies work see
-`xinject.context.XContext.dependency_chain`.
+[`XContext.dependency_chain`](api/xinject/context.html#xinject.context.XContext.dependency_chain){target=_blank}.
 
 After the dependency-chain is checked, the default-retrievers are checked
 in python's `mro` (method-resolution-order), checking its own class first
 before checking any super-classes for default-retrievers.
 
-## Things to Watch Out For
+# Things to Watch Out For
 
 - If a field has not type-hint, but does have a normal (non-property) default-value,
   The type of the default-value will be used for type-hint.
