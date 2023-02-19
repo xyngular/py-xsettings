@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/xyngular/py-xsettings/compare/v1.1.0...v1.1.1) (2023-02-19)
+
+
+### Bug Fixes
+
+* add doc plugins. ([6fe8476](https://github.com/xyngular/py-xsettings/commit/6fe8476e22476fbc923970143d6dd9138a96038c))
+
 ## [1.1.0](https://github.com/xyngular/py-xsettings/compare/v1.0.0...v1.1.0) (2023-02-19)
 
 
