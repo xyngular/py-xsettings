@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import pytest as pytest
 
@@ -82,14 +82,6 @@ def test_verify_retriever_on_normal_field():
             _private = None
 
 
-class Retriever(SettingsRetrieverProtocol):
-    def get(self, field: SettingsField, *, settings: Settings) -> Any:
-        pass
-
-
-retriever = Retriever()
-
-
 def test_property_as_retreiver():
     def my_default_retreiver(*, field: SettingsField, settings: 'Settings'):
         return f"field.name={field.name}"
@@ -152,6 +144,10 @@ def test_attrs_no_default():
 
 
 def test_attrs_merge():
+    class Retriever(SettingsRetrieverProtocol):
+        def get(self, field: SettingsField, *, settings: Settings) -> Any:
+            pass
+
     new_retriever = Retriever()
 
     class TestClass(Settings):
@@ -183,3 +179,13 @@ def test_retriever_type():
     with pytest.raises(AssertionError):
         class TestClass(Settings):
             val: str = SettingsField(retriever="abc")
+
+
+def test_with_generic_typehint():
+    class SomeSettings(Settings):
+        generic_settings_field: Sequence[str]
+
+    SomeSettings.grab().generic_settings_field = ['a', '1', '!']
+
+    assert SomeSettings.grab().generic_settings_field == ['a', '1', '!']
+    assert type(SomeSettings.grab().generic_settings_field) is list

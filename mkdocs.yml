@@ -29,19 +29,16 @@ theme:
         icon: material/weather-sunny
         name: Switch to light mode
   features:
-#    - header.autohide
     - navigation.sections
     - navigation.expand
     - navigation.top
-#    - navigation.instant
     - navigation.indexes
     - navigation.tracking
     - content.code.annotate
   icon:
     repo: fontawesome/brands/github
-#  logo: media/aws-logo-light.svg
-#  favicon: media/aws-logo-light.svg
-#  custom_dir: docs/overrides
+
+
 markdown_extensions:
   - admonition
   - pymdownx.tabbed:
@@ -73,6 +70,15 @@ plugins:
       javascript_dir: js
   - git-revision-date
   - search
+  - autorefs
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+            show_root_full_path: False
+            show_signature_annotations: true
 extra:
   version:
     provider: mike

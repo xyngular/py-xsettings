@@ -2,6 +2,7 @@ import dataclasses
 from typing import Callable, Iterable
 from copy import copy
 from typing import Type, Any, Dict, Generic, TypeVar, TYPE_CHECKING, get_type_hints
+import typing_inspect
 
 from xloop import xloop
 
@@ -297,10 +298,11 @@ class SettingsField:
                 value = None
 
         if not converter:
-            converter = self.type_hint
+            converter = self._get_default_converter()
 
         if converter and value is not None:
-            if not self.type_hint or not isinstance(value, self.type_hint):
+            hint = self._get_base_typehint()
+            if not hint or not isinstance(value, hint):
                 try:
                     value = converter(value)
                 except Exception as e:
@@ -321,6 +323,35 @@ class SettingsField:
                 f'for a required field ({self}).'
             )
         return value
+
+    def _get_default_converter(self) -> Callable:
+        hint = self.type_hint
+        if isinstance(hint, typing_inspect.typingGenericAlias):
+            # Only produce error if the type does not match and so system attempts to use
+            # the default converter.
+            def generic_converter_error(x):
+                # todo: support looking at generic arg(s), converting any that need it and then
+                #   putting result into generic type; and if it's a generic Sequence,
+                #   use a List or Tuple, and so on...
+                raise SettingsConversionError(
+                    f"Unsupported: Can't convert value {x} into a generic type "
+                    f"(future feature)."
+                )
+            return generic_converter_error
+
+        # By default, convert using the type-hint;
+        # ie: If `int` was type-hint, then it could do `int(value)` to get an `int` out of `value`.
+        return hint
+
+    def _get_base_typehint(self):
+        hint = self.type_hint
+        if not hint:
+            return None
+
+        origin = typing_inspect.get_origin(hint)
+        if origin is None:
+            return hint
+        return origin
 
 
 def _allowed_field(k: str, v):
