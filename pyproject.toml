@@ -20,6 +20,8 @@ xinject = "^1.2.0"
 xloop = "^1.0.1"
 xbool = "^1.0.0"
 ciso8601 = "^2.3.0"
+mkdocs-autorefs = "^0.4.1"
+mkdocstrings = "^0.20.0"
 
 
 [tool.poetry.group.dev.dependencies]
