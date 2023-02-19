@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/xyngular/py-xsettings/compare/v1.0.0...v1.1.0) (2023-02-19)
+
+
+### Features
+
+* support generic type-hints in fields. ([b6969bf](https://github.com/xyngular/py-xsettings/commit/b6969bf133da5296bd0cfaa660f03aeaf8b3f206))
+
 ## 1.0.0 (2023-01-12)
 
 
