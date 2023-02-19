@@ -144,6 +144,10 @@ def test_attrs_no_default():
 
 
 def test_attrs_merge():
+    class Retriever(SettingsRetrieverProtocol):
+        def get(self, field: SettingsField, *, settings: Settings) -> Any:
+            pass
+
     new_retriever = Retriever()
 
     class TestClass(Settings):
