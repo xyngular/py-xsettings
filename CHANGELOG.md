@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/xyngular/py-xsettings/compare/v1.1.1...v1.1.2) (2023-02-20)
+
+
+### Bug Fixes
+
+* pdoc3 can't find readme when module is in site packages; don't really need this anymore anyway... ([16648b2](https://github.com/xyngular/py-xsettings/commit/16648b2fe00cc63c566495728e3b5af8b6e0cf87))
+
 ## [1.1.1](https://github.com/xyngular/py-xsettings/compare/v1.1.0...v1.1.1) (2023-02-19)
 
 
