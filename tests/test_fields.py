@@ -4,7 +4,7 @@ import pytest as pytest
 
 from xsettings.fields import SettingsField, generate_setting_fields
 from xsettings.retreivers import SettingsRetrieverProtocol
-from xsettings import Settings
+from xsettings import BaseSettings
 
 
 @pytest.mark.parametrize(
@@ -54,7 +54,7 @@ def test_verify_retriever_on_property_field():
     def prop_field(self) -> Optional[str]:
         return None
 
-    class TestClass(Settings):
+    class TestClass(BaseSettings):
         def method(self):
             pass
 
@@ -69,7 +69,7 @@ def test_verify_retriever_on_property_field():
 
 def test_verify_retriever_on_normal_field():
     with pytest.raises(AssertionError, match='Invalid retriever for field .*some_field'):
-        class TestClass(Settings):
+        class TestClass(BaseSettings):
             def method(self):
                 pass
 
@@ -83,10 +83,10 @@ def test_verify_retriever_on_normal_field():
 
 
 def test_property_as_retreiver():
-    def my_default_retreiver(*, field: SettingsField, settings: 'Settings'):
+    def my_default_retreiver(*, field: SettingsField, settings: 'BaseSettings'):
         return f"field.name={field.name}"
 
-    class TestSettings(Settings, default_retrievers=[my_default_retreiver]):
+    class TestSettings(BaseSettings, default_retrievers=[my_default_retreiver]):
         my_str_field: str
 
         @property
@@ -101,7 +101,7 @@ def test_property_as_retreiver():
 
 
 def test_attrs_default_no_typehint():
-    class TestClass(Settings):
+    class TestClass(BaseSettings):
         val = 1
 
     fields = TestClass._setting_fields
@@ -117,7 +117,7 @@ def test_attrs_default_no_typehint():
 
 
 def test_attrs_default_with_typehint():
-    class TestClass(Settings):
+    class TestClass(BaseSettings):
         val: str = 1
 
     fields = TestClass._setting_fields
@@ -133,7 +133,7 @@ def test_attrs_default_with_typehint():
 
 
 def test_attrs_no_default():
-    class TestClass(Settings):
+    class TestClass(BaseSettings):
         val: str
 
     fields = TestClass._setting_fields
@@ -145,12 +145,12 @@ def test_attrs_no_default():
 
 def test_attrs_merge():
     class Retriever(SettingsRetrieverProtocol):
-        def get(self, field: SettingsField, *, settings: Settings) -> Any:
+        def get(self, field: SettingsField, *, settings: BaseSettings) -> Any:
             pass
 
     new_retriever = Retriever()
 
-    class TestClass(Settings):
+    class TestClass(BaseSettings):
         val: str = SettingsField(
             name="name",
             required="required",
@@ -177,12 +177,12 @@ def test_attrs_merge():
 
 def test_retriever_type():
     with pytest.raises(AssertionError):
-        class TestClass(Settings):
+        class TestClass(BaseSettings):
             val: str = SettingsField(retriever="abc")
 
 
 def test_with_generic_typehint():
-    class SomeSettings(Settings):
+    class SomeSettings(BaseSettings):
         generic_settings_field: Sequence[str]
 
     SomeSettings.grab().generic_settings_field = ['a', '1', '!']

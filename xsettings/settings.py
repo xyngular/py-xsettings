@@ -1,6 +1,6 @@
 """
 
-See doc-comments for `Settings` below.
+See doc-comments for `BaseSettings` below.
 
 
 """
@@ -26,25 +26,25 @@ RetrieverOrList = 'Union[SettingsRetrieverProtocol, Iterable[SettingsRetrieverPr
 
 
 class _SettingsMeta(type):
-    """Represents the class-type instance/obj of the `Settings` class.
+    """Represents the class-type instance/obj of the `BaseSettings` class.
     Any attributes in this object will be class-level attributes of
-    a class or subclass of `Settings`.
+    a class or subclass of `BaseSettings`.
 
-    ie: A `_SettingsMeta` instance is created each time a new Settings or Settings subclass
+    ie: A `_SettingsMeta` instance is created each time a new BaseSettings or BaseSettings subclass
         type/class is created (it represents the class/type its self).
     """
 
-    # This will be a class-attributes on the normal `Settings` class/subclasses.
+    # This will be a class-attributes on the normal `BaseSettings` class/subclasses.
     _setting_fields: Dict[str, SettingsField]
     _default_retrievers: 'List[SettingsRetrieverProtocol]'
 
     _there_is_plain_superclass: bool
-    """ There is some other superclass, other then Settings/object/Dependency. """
+    """ There is some other superclass, other then BaseSettings/object/Dependency. """
 
-    _setting_subclasses_in_mro: 'List[Type[Settings]]'
+    _setting_subclasses_in_mro: 'List[Type[BaseSettings]]'
     """
-    Includes self/cls plus all superclasses who are Settings subclasses in __mro__
-    (but not Settings it's self); in the same order that they appears in __mro__.
+    Includes self/cls plus all superclasses who are BaseSettings subclasses in __mro__
+    (but not BaseSettings it's self); in the same order that they appears in __mro__.
     """
 
     def __new__(
@@ -58,11 +58,11 @@ class _SettingsMeta(type):
         **kwargs,
     ):
         """
-        The instance of `mcls` is a Settings class or subclass
-        (not Settings object, the class its self).
+        The instance of `mcls` is a BaseSettings class or subclass
+        (not BaseSettings object, the class its self).
 
         Objective in this method is to create a set of SettingsField object(s) for use by the new
-        Settings subclass, and set their default-settings correctly if the user did not
+        BaseSettings subclass, and set their default-settings correctly if the user did not
         provide an explict setting.
 
         Args:
@@ -74,7 +74,7 @@ class _SettingsMeta(type):
                 no set retriever (ie: not set directly be user).
 
                 This can be passed in like so:
-                `class MySettings(Settings, default_retriever=...)`
+                `class MySettings(BaseSettings, default_retriever=...)`
 
             **kwargs: Any extra arguments get supplied to the super-class-type.
         """
@@ -84,7 +84,7 @@ class _SettingsMeta(type):
         attrs['_default_retrievers'] = list(xloop(default_retrievers))
 
         if skip_field_generation:
-            # Skip doing anything special with any Settings classes created in our/this module;
+            # Skip doing anything special with any BaseSettings classes created in our/this module;
             # They are abstract classes and are need to be sub-classed to do anything with them.
             attrs['_setting_fields'] = {}
             cls = super().__new__(mcls, name, bases, attrs, **kwargs)  # noqa
@@ -102,17 +102,17 @@ class _SettingsMeta(type):
         attrs['_setting_subclasses_in_mro'] = setting_subclasses_in_mro
         for c in types_in_mro:
             # Skip the ones that are always present, and don't need to examined...
-            if c is Settings:
+            if c is BaseSettings:
                 continue
             if c is object:
                 continue
             if c is Dependency:
                 continue
 
-            # We want to know the order if aby Settings subclasses that we are inheriting from.
+            # We want to know the order if aby BaseSettings subclasses that we are inheriting from.
             # Also want to know if there are any plain/non-setting classes in our parent hierarchy
             # (that are not object/Dependency, as they both will always be present).
-            if issubclass(c, Settings):
+            if issubclass(c, BaseSettings):
                 setting_subclasses_in_mro.append(c)
             else:
                 attrs['_there_is_plain_superclass'] = True
@@ -133,7 +133,7 @@ class _SettingsMeta(type):
         for k in setting_fields.keys():
             attrs.pop(k, None)
 
-        # This creates the new Settings class/subclass.
+        # This creates the new BaseSettings class/subclass.
         cls = super().__new__(mcls, name, bases, attrs, **kwargs)
 
         # Insert newly crated class into top of its setting subclasses list.
@@ -153,7 +153,7 @@ class _SettingsMeta(type):
 
         Example:
 
-        >>> class MySettings(Settings):
+        >>> class MySettings(BaseSettings):
         ...    my_url_setting: str
         >>>
         >>> class SomeClass:
@@ -169,12 +169,12 @@ class _SettingsMeta(type):
             c: _SettingsMeta
             if key in c._setting_fields:
                 break
-            # We got to `Settings` without finding anything, Settings has no fields,
+            # We got to `BaseSettings` without finding anything, BaseSettings has no fields,
             # raise exception about how we could not find field.
-            if c is Settings:
+            if c is BaseSettings:
                 raise AttributeError(
                     f"Have no class-attribute or defined SettingsField for "
-                    f"attribute name ({key}) on Settings subclass ({self})."
+                    f"attribute name ({key}) on BaseSettings subclass ({self})."
                 )
 
         @SettingsClassProperty
@@ -199,17 +199,17 @@ class _SettingsMeta(type):
             c: _SettingsMeta
             if field := c._setting_fields.get(key):
                 break
-            # We got to `Settings` without finding anything, Settings has no fields,
+            # We got to `BaseSettings` without finding anything, BaseSettings has no fields,
             # give-up searching for field.
-            if c is Settings:
+            if c is BaseSettings:
                 break
 
         if not field:
-            # Right now we don't support making new SettingField's after the Settings subclass
+            # Right now we don't support making new SettingField's after the BaseSettings subclass
             # has been created. We could decide to do that in the future, but for now we
             # are keeping things simpler.
             raise AttributeError(
-                f"Setting new fields on Settings subclass unsupported currently, attempted to "
+                f"Setting new fields on BaseSettings subclass unsupported currently, attempted to "
                 f"set key ({key}) with value ({value})."
             )
 
@@ -217,13 +217,13 @@ class _SettingsMeta(type):
         field.default_value = value
 
 
-class Settings(
+class BaseSettings(
     Dependency,
     metaclass=_SettingsMeta,
     default_retrievers=[],
 
-    # Settings has no fields, it's a special abstract-type of class skip field generation.
-    # You should never use this option in a Settings subclass.
+    # BaseSettings has no fields, it's a special abstract-type of class skip field generation.
+    # You should never use this option in a BaseSettings subclass.
     skip_field_generation=True
 ):
     """
@@ -238,7 +238,7 @@ class Settings(
     You define a Settings and properties very similar to how you define a dataclass. You specify
     a property name, type_hint, and default_value.
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...    name: type_hint = default_value
 
     A default `SettingsField` will be configured using the name, type_hint, and default_value as
@@ -255,22 +255,22 @@ class Settings(
 
     Example of various ways to allocate a SettingsField on a Settings subclass:
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...     setting_1: int
     Allocates
     >>> SettingsField(name="setting_1", type_hint=int, resolver=SettingsResolver)
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...     setting_1: int = 3
     Allocates
     >>> SettingsField(name="setting_1", type_hint=int, resolver=SettingsResolver, default_value=3)
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...     setting_1 = 3
     Allocates
     >>> SettingsField(name="setting_1", type_hint=int, resolver=SettingsResolver, default_value=3)
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...     setting_1: int = SettingsField(name="other", required=False)
     Allocates
     >>> SettingsField(name="other", type_hint=int, resolver=SettingsResolver, required=False)
@@ -283,9 +283,9 @@ class Settings(
 
     Examples of how you might use this
 
-    >>> class MySettings(Settings):
+    >>> class MySettings(BaseSettings):
     ...    my_url_setting: str
-    >>> class MySubSettings(Settings):
+    >>> class MySubSettings(BaseSettings):
     ...    my_field: str
     >>> class SomeClass:
     ...    some_attr = MySettings.my_url_setting
@@ -405,14 +405,14 @@ class Settings(
         for c in cls._setting_subclasses_in_mro:
             c: _SettingsMeta
             # todo: use isinstance?
-            if c is Settings:
-                # We got to the 'Settings' base-class it's self, no need to go any further.
+            if c is BaseSettings:
+                # We got to the 'BaseSettings' base-class it's self, no need to go any further.
                 break
             if field := c._setting_fields.get(key):
                 # Found the field, break out of loop.
                 break
 
-        def get_normal_value(obj: Settings = self):
+        def get_normal_value(obj: BaseSettings = self):
             nonlocal value
             nonlocal attr_error
 
@@ -507,7 +507,14 @@ class Settings(
         return value
 
 
-def _resolve_field_value(settings: Settings, field: SettingsField, key: str, value: Any):
+Settings = BaseSettings
+"""
+Deprecated; Use `BaseSettings` instead.
+
+Here for backwards compatability, renamed original class from `Settings` to `BaseSettings`.
+"""
+
+def _resolve_field_value(settings: BaseSettings, field: SettingsField, key: str, value: Any):
     cls = type(settings)
 
     # If we have a field, and current value is Default, or we got AttributeError,
@@ -535,6 +542,8 @@ def _resolve_field_value(settings: Settings, field: SettingsField, key: str, val
 
     if value is None:
         value = field.default_value
+        if callable(value):
+            value = value()
 
     if value is None:
         if field.required:

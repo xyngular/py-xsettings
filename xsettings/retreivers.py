@@ -1,6 +1,6 @@
 from xsentinels.sentinel import Sentinel
 from typing import Any, Protocol, Callable
-from .settings import SettingsField, Settings
+from .settings import SettingsField, BaseSettings
 import os
 
 # Tell pdoc3 to document the normally private method __call__.
@@ -14,9 +14,9 @@ class SettingsRetrieverProtocol(Protocol):
     The purpose of the base SettingsRetrieverProtocol is to define the base-interface for
     retrieving settings values.
 
-    The retriever can be any callable, by default `xsettings.settings.Settings` will
+    The retriever can be any callable, by default `xsettings.settings.BaseSettings` will
     not use a default retriever; normally a subclass or some sort of generic
-    base-subclass of `xsettings.settings.Settings` will be used to specify a default
+    base-subclass of `xsettings.settings.BaseSettings` will be used to specify a default
     retriever to use.
 
     A retriever can also be specified per-field via `xsettings.fields.SettingsField.retriever`.
@@ -25,7 +25,7 @@ class SettingsRetrieverProtocol(Protocol):
     is the one that is used.
 
     You can also add one or more retrievers to this `instance` of settings via the
-    `xsettings.setting.Settings.add_instance_retrievers` method
+    `xsettings.setting.BaseSettings.add_instance_retrievers` method
     (won't modify default_retrievers for the entire class, only modifies this specific instance).
 
     .. note:: As a side-note, values set directly on Setting instances are first checked for and
@@ -54,9 +54,9 @@ class SettingsRetrieverProtocol(Protocol):
     before checking any super-classes for default-retrievers.
     """
 
-    def __call__(self, *, field: SettingsField, settings: Settings) -> Any:
+    def __call__(self, *, field: SettingsField, settings: BaseSettings) -> Any:
         """
-        This is how the Settings field, when retrieving its value, will call us.
+        This is how the BaseSettings field, when retrieving its value, will call us.
         You must override this (or simply use a normal function with the same parameters).
 
         This convention gives flexibility: It allows simple methods to be retrievers,
@@ -64,7 +64,7 @@ class SettingsRetrieverProtocol(Protocol):
 
         Args:
             field: Field we need to retrieve.
-            settings: Related Settings object that has the field we are retrieving.
+            settings: Related BaseSettings object that has the field we are retrieving.
 
         Returns: Retrieved value, or None if no value can be found.
             By default, we return `None` (as we are a basic/abstract retriever)
@@ -76,7 +76,7 @@ class SettingsRetrieverProtocol(Protocol):
 
 class EnvVarRetriever(SettingsRetrieverProtocol):
     """ Used to  """
-    def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
+    def __call__(self, *, field: SettingsField, settings: 'BaseSettings') -> Any:
         environ = os.environ
 
         # First try to get field using the same case as the original field name:

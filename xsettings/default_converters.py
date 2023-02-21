@@ -26,7 +26,7 @@ def to_datetime(value):
         return dt.datetime(value.year, value.month, value.day, tzinfo=tz.tzutc())
 
     raise ValueError(
-        f"Tried to convert a datetime from unsupported Settings value ({value})."
+        f"Tried to convert a datetime from unsupported BaseSettings value ({value})."
     )
 
 

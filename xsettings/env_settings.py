@@ -1,10 +1,10 @@
-from xsettings.settings import Settings
+from xsettings.settings import BaseSettings
 from .retreivers import EnvVarRetriever
 
 
-class EnvVarSettings(Settings, default_retrievers=EnvVarRetriever()):
+class EnvVarSettings(BaseSettings, default_retrievers=EnvVarRetriever()):
     """
-    Base subclass of `xsettings.settings.Settings` with the default retriever
+    Base subclass of `xsettings.settings.BaseSettings` with the default retriever
     set as the `xsettings.retrievers.EnvVarRetriever`.
 
     This means when a settings field is defined without a retriever

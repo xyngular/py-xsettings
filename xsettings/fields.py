@@ -10,7 +10,7 @@ from .default_converters import DEFAULT_CONVERTERS
 from xsentinels import unwrap_union, Default
 
 if TYPE_CHECKING:
-    from .settings import Settings
+    from .settings import BaseSettings
     from .retreivers import SettingsRetrieverProtocol
 
 T = TypeVar("T")
@@ -35,10 +35,10 @@ class SettingsClassProperty(Generic[T]):
 class _PropertyRetriever:
     """
     Special case, internally used retriever only assigned to individual fields
-    (and not as a default retriever for the entire Settings subclass).
+    (and not as a default retriever for the entire BaseSettings subclass).
 
-    What is used to wrap a `@property` on a Settings subclass.
-    We don't use the default retriever for any defined properties on a Settings subclass,
+    What is used to wrap a `@property` on a BaseSettings subclass.
+    We don't use the default retriever for any defined properties on a BaseSettings subclass,
     we instead use `PropertyRetriever`; as the property it's self is considered the 'retriever'.
 
     Will check the property getter function to retrieve the value by calling its
@@ -51,7 +51,7 @@ class _PropertyRetriever:
     def __init__(self, property_retriever: property):
         self.property_retriever = property_retriever
 
-    def __call__(self, *, field: 'SettingsField', settings: 'Settings') -> Any:
+    def __call__(self, *, field: 'SettingsField', settings: 'BaseSettings') -> Any:
         return self.property_retriever.__get__(settings, type(settings))
 
 
@@ -63,7 +63,7 @@ class SettingsField:
 
         Example Use Case:
 
-        For plain Settings classes, name is not really used.
+        For plain BaseSettings classes, name is not really used.
         But it can be useful in custom/special retrievers.
 
         An example of such a one is ConfigSettings/ConfigRetriever.
@@ -76,10 +76,10 @@ class SettingsField:
         is different then the one used to retrieve the values.
     """
 
-    source_class: 'Type[Settings]' = None
+    source_class: 'Type[BaseSettings]' = None
     """
     For debug purposes only. Will be set when the class level SettingsField is created. It is a
-    way to get back to the source Settings class.
+    way to get back to the source BaseSettings class.
 
     It's positioned just after `name` so it's printed earlier in a log-line.
     """
@@ -98,7 +98,7 @@ class SettingsField:
     If `required` is set to False, a None will be returned instead of raising an exception.
 
     This here in the dataclass defaults to None so we can detect if user has set this or not.
-    When fields are finalized into a Settings subclass, and this is still a None,
+    When fields are finalized into a BaseSettings subclass, and this is still a None,
     we will determine the `required` value like so:
 
     if field-type-hint is wrapped in an Optional, ie: `Optional[str]`,
@@ -135,8 +135,8 @@ class SettingsField:
 
     System will try this retriever first (if set to something),
     before trying other retrievers such as instance-retrievers
-    `xsettings.settings.Settings.add_instance_retrievers`
-    or default-retrievers `xsettings.settings.Settings.__init_subclass__`.
+    `xsettings.settings.BaseSettings.add_instance_retrievers`
+    or default-retrievers `xsettings.settings.BaseSettings.__init_subclass__`.
 
     See those links for more details (such as how dependency-chain and mro parents are resolved
     when looking for other retrievers).
@@ -152,7 +152,7 @@ class SettingsField:
     This field settings defaults to whatever is assigned to the class-attribute:
 
     ```python
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
          my_attribute_with_default_value: str = "some-default-value"
     ```
 
@@ -163,7 +163,7 @@ class SettingsField:
     (such as ConfigRetriever from xyn-config).
 
     The default value can also be a property object
-    (such as forward-reference from another Settings class).
+    (such as forward-reference from another BaseSettings class).
 
     If it's a property object, we will ask the object for it's property value and
     use that for the default-value when needed.
@@ -204,7 +204,7 @@ class SettingsField:
         But, if you NEED to customize the Field object, this is where the `.getter` on
         SettingsField becomes handy.
 
-        >>> class MySettings(Settings):
+        >>> class MySettings(BaseSettings):
         ...
         ...    # You can easily setup a field like normal, and then use getter to setup
         ...    # the getter function for the field.
@@ -253,7 +253,7 @@ class SettingsField:
             self.default_value = copy(override.default_value)
         return self
 
-    def retrieve_value(self, *, settings: 'Settings'):
+    def retrieve_value(self, *, settings: 'BaseSettings'):
         """Convenience method for getting the value from the retriever."""
         return self.retriever(self, settings=settings)
 
@@ -455,7 +455,7 @@ def generate_setting_fields(
         if field.type_hint in (None, Any, type(None)):
             raise AssertionError(
                 f"Must have type-hint for field ({field}). This may be because there is a "
-                f"property defined on Settings subclass that has no return type-hint,"
+                f"property defined on BaseSettings subclass that has no return type-hint,"
                 f"or type annotation for it somewhere else in the class. "
                 f"Or it could be the type-hint is `Any` or `NoneType` which are also "
                 f"not supported. Or there may be some other reason there is no type hint. "
@@ -524,7 +524,7 @@ def _add_field_default_from_attrs(class_attrs: Dict[str, Any], merge_field):
                 # TODO: Support property setters someday.
                 if v.fset or v.fdel:
                     raise AssertionError(
-                        "Settings and SettingsField's currently don't have the ability to "
+                        "BaseSettings and SettingsField's currently don't have the ability to "
                         "support a property setter/deleter. You can only use read-only properties "
                         "with them. However, you can set a value on a settings field that has a "
                         "property getter, and that value will be used like you would expect. "
