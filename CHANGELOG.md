@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/xyngular/py-xsettings/compare/v1.1.2...v1.2.0) (2023-02-21)
+
+
+### Features
+
+* rename Settings to BaseSettings; retained backwards compatibility. ([07f2487](https://github.com/xyngular/py-xsettings/commit/07f24873fa6cd76a764db68e4ca1753d8d6da833))
+
 ## [1.1.2](https://github.com/xyngular/py-xsettings/compare/v1.1.1...v1.1.2) (2023-02-20)
 
 
