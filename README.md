@@ -11,7 +11,7 @@
 
 Helps document and centralizing settings in a python project/library.
 
-Facilitates looking up Settings from `retrievers`, such as an environmental variable retriever.
+Facilitates looking up BaseSettings from `retrievers`, such as an environmental variable retriever.
 
 Converts and standardizes any retrieved values to the type-hint on the setting attribute (such as bool, int, datetime, etc).
 
@@ -77,9 +77,9 @@ class MySettings(EnvVarSettings):
         converter=DBConfig.from_dict
     )
 
-# Settings subclasses are singleton-like dependencies that are
+# BaseSettings subclasses are singleton-like dependencies that are
 # also injectables and lazily-created on first-use.
-# YOu can use a special `Settings.grab()` class-method to
+# YOu can use a special `BaseSettings.grab()` class-method to
 # get the current settings object.
 #
 # So you can grab the current MySettings object lazily via
@@ -127,7 +127,7 @@ assert my_settings.app_env == 'dev'
 # explicitly set to anything on settings object:
 assert my_settings.app_version == '1.2.3'
 
-# Any Settings subclass can use dependency-injection:
+# Any BaseSettings subclass can use dependency-injection:
 assert my_settings.token is None
 
 with MySettings(token='my-token'):
@@ -149,7 +149,7 @@ assert my_settings.token is None
 try:
     # If a setting is undefined and required (ie: not-optional),
     # and it was not set to anything nor is there a default or an env-var for it;
-    # Settings will raise an exception when getting it:
+    # BaseSettings will raise an exception when getting it:
     print(my_settings.api_endpoint_url)
 except SettingsValueError as e:
     assert True

@@ -37,9 +37,9 @@ def test_quick_start_readme_example():
             converter=DBConfig.from_dict
         )
 
-    # Settings subclasses are singleton-like dependencies that are
+    # BaseSettings subclasses are singleton-like dependencies that are
     # also injectables and lazily-created on first-use.
-    # YOu can use a special `Settings.grab()` class-method to
+    # YOu can use a special `BaseSettings.grab()` class-method to
     # get the current settings object.
     #
     # So you can grab the current MySettings object lazily via
@@ -85,7 +85,7 @@ def test_quick_start_readme_example():
     # explicitly set to anything on settings object:
     assert my_settings.app_version == '1.2.3'
 
-    # Any Settings subclass can use dependency-injection:
+    # Any BaseSettings subclass can use dependency-injection:
     assert my_settings.token is None
 
     with MySettings(token='my-token'):
@@ -107,7 +107,7 @@ def test_quick_start_readme_example():
     try:
         # If a setting is undefined and required (ie: not-optional),
         # and it was not set to anything nor is there a default or an env-var for it;
-        # Settings will raise an exception when getting it:
+        # BaseSettings will raise an exception when getting it:
         print(my_settings.api_endpoint_url)
     except SettingsValueError as e:
         assert True
@@ -126,10 +126,10 @@ def test_quick_start_readme_example():
 
 
 def test_class_lazy_attr_forward_ref():
-    from xsettings import Settings, EnvVarSettings
+    from xsettings import BaseSettings, EnvVarSettings
     import os
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         table_name: str
 
     MySettings.grab().table_name = "the-t-name"
@@ -168,7 +168,7 @@ def test_class_lazy_attr_forward_ref():
     assert MySettings.grab().table_name == 'env-table-name'
 
     # Example 3, default value of settings field can be a lazy-property-ref
-    class MyOtherSettings(Settings):
+    class MyOtherSettings(BaseSettings):
         my_setting_attr: str = MyEnvSettings.my_table_name
 
     my_other_settings = MyOtherSettings.proxy()
@@ -179,9 +179,9 @@ def test_class_lazy_attr_forward_ref():
 
 
 def test_change_default_example():
-    from xsettings import Settings, SettingsField
+    from xsettings import BaseSettings, SettingsField
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: int
         b: int = 1
 
@@ -190,7 +190,7 @@ def test_change_default_example():
     # default/fallback value of `2`:
     MySettings.a = 2
 
-    class MyOtherSettings(Settings):
+    class MyOtherSettings(BaseSettings):
         some_other_setting: str
 
     # You can also set a lazy-ref as setting field's
@@ -205,10 +205,10 @@ def test_change_default_example():
 
 
 def test_read_only_props_1():
-    from xsettings import Settings
+    from xsettings import BaseSettings
     from decimal import Decimal
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         @property
         def some_setting(self) -> Decimal:
             return "1.34"
@@ -217,10 +217,10 @@ def test_read_only_props_1():
 
 
 def test_read_only_props_2():
-    from xsettings import Settings
+    from xsettings import BaseSettings
     from decimal import Decimal
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         # Does not matter if this is before or after the property,
         # Python stores type annotations in a separate area vs
         # normal class attribute values in Python.
@@ -234,10 +234,10 @@ def test_read_only_props_2():
 
 
 def test_forward_ref_example():
-    from xsettings import Settings
+    from xsettings import BaseSettings
     from decimal import Decimal
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         # Does not matter if this is before or after the property,
         # Python stores type annotations in a separate area
         # vs normal class attribute values in Python.
@@ -247,19 +247,19 @@ def test_forward_ref_example():
         def some_setting(self) -> Decimal:
             return "1.34"
 
-    class OtherSettings(Settings):
+    class OtherSettings(BaseSettings):
         other_setting: str = MySettings.some_setting
 
     assert OtherSettings.grab().other_setting == "1.34"
 
 
 def test_index_doc_example():
-    from xsettings import Settings, SettingsField
+    from xsettings import BaseSettings, SettingsField
 
-    def my_retriever(*, field: SettingsField, settings: Settings):
+    def my_retriever(*, field: SettingsField, settings: BaseSettings):
         return f"retrieved-{field.name}"
 
-    class MySettings(Settings, default_retrievers=my_retriever):
+    class MySettings(BaseSettings, default_retrievers=my_retriever):
         some_setting: str
 
     assert MySettings.grab().some_setting == 'retrieved-some_setting'

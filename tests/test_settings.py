@@ -10,13 +10,13 @@ from xsentinels import Default
 
 from xsettings.env_settings import EnvVarSettings
 from xsettings.fields import SettingsConversionError, _PropertyRetriever
-from xsettings.settings import Settings, SettingsField
+from xsettings.settings import BaseSettings, SettingsField
 from xsettings.errors import SettingsValueError
 from xsettings.retreivers import SettingsRetrieverProtocol
 
 
 def test_set_default_value_after_settings_subclass_created():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         my_str: str
 
     my_settings = MySettings.proxy()
@@ -27,7 +27,7 @@ def test_set_default_value_after_settings_subclass_created():
     MySettings.my_str = 'default-value'
     assert my_settings.my_str == 'default-value'
 
-    class OtherSettings(Settings):
+    class OtherSettings(BaseSettings):
         other_str: str
 
     MySettings.my_str = OtherSettings.other_str
@@ -42,14 +42,14 @@ def test_use_property_on_settings_subclass():
     value_to_retrieve = "RetrievedValue"
 
     class MyRetriever(SettingsRetrieverProtocol):
-        def __call__(self, *, field: SettingsField, settings: 'Settings') -> Any:
+        def __call__(self, *, field: SettingsField, settings: 'BaseSettings') -> Any:
             nonlocal value_to_retrieve
             return value_to_retrieve
 
-    class MyForwardSettings(Settings):
+    class MyForwardSettings(BaseSettings):
         my_forwarded_field: str = "my_forwarded_field-value"
 
-    class MySettings(Settings, default_retrievers=MyRetriever()):
+    class MySettings(BaseSettings, default_retrievers=MyRetriever()):
         my_field = "my_field-value"
 
         @property
@@ -83,7 +83,7 @@ def test_default_converters():
     def my_converter(value):
         return Decimal(1.654)
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         my_bool: bool
         my_date: dt.date = "2023-03-04"
         my_datetime: dt.datetime = "2020-01-09T12:00:02"
@@ -104,7 +104,7 @@ def test_default_converters():
 
 
 def test_defaults():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         no_default: int
         default_convert_str_to_int: int = "3"
         default_no_conversion_needed: int = 6
@@ -124,7 +124,7 @@ def test_defaults():
 
 
 def test_conversion_returns_none():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         requried: str = SettingsField(default_value=3, converter=lambda x: None)
         not_requried: str = SettingsField(
             default_value=3, converter=lambda x: None, required=False
@@ -141,7 +141,7 @@ def test_enum():
         FIVE = 5
         SIX = 6
 
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         enum: MyEnum
         enum2: MyEnum = SettingsField(converter=MyEnum)
 
@@ -153,7 +153,7 @@ def test_enum():
 
 
 def test_field_in_class_reuse():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: int = 1
 
     class MyClass:
@@ -164,7 +164,7 @@ def test_field_in_class_reuse():
 
 
 def test_field_overwriting():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: str
 
     class MyEnvSettings(EnvVarSettings):
@@ -200,7 +200,7 @@ def test_field_overwriting_classlevel():
     class KevinEnvSettings(EnvVarSettings):
         b: int
 
-    class KevinSettings(Settings):
+    class KevinSettings(BaseSettings):
         a: str = KevinEnvSettings.b
 
     my_env_settings = KevinEnvSettings.grab()
@@ -217,7 +217,7 @@ def test_field_overwriting_classlevel():
 
 
 def test_class_field_overwrite():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: str
 
     with pytest.raises(AttributeError):
@@ -225,7 +225,7 @@ def test_class_field_overwrite():
 
 
 def test_settings_inheritance():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: int = 1
 
     class MySubSettings(MySettings):
@@ -246,7 +246,7 @@ def test_settings_inheritance():
 def test_property_as_forward_ref_works_via_return_type():
     did_call_property = False
 
-    class ASettings(Settings):
+    class ASettings(BaseSettings):
         other_setting = 3
 
         @property
@@ -256,7 +256,7 @@ def test_property_as_forward_ref_works_via_return_type():
             assert isinstance(self, ASettings)
             return self.other_setting
 
-    class BSettings(Settings):
+    class BSettings(BaseSettings):
         b_settings_forward_from_a: Decimal = ASettings.prop_to_forward_ref
 
     assert ASettings.grab().other_setting == 3
@@ -289,14 +289,14 @@ def test_property_as_forward_ref_works_via_annotation():
             assert isinstance(self, ASettings)
             return self.other_setting
 
-    class ASettings(Settings):
+    class ASettings(BaseSettings):
         other_setting = 3
 
         # Also testing if annotation if defined separately still works vs a property/default-value.
         prop_to_forward_ref = AProperty.prop_to_forward_ref
         prop_to_forward_ref: str
 
-    class BSettings(Settings):
+    class BSettings(BaseSettings):
         b_settings_forward_from_a: Decimal = ASettings.prop_to_forward_ref
 
     assert ASettings.grab().other_setting == 3
@@ -322,7 +322,7 @@ def test_property_as_forward_ref_works_via_annotation():
 
 def test_property_field_detects_no_type_hint():
     with pytest.raises(AssertionError, match='Must have type-hint for field'):
-        class ASettings(Settings):
+        class ASettings(BaseSettings):
             # We specify no type-annotation or return-type for property,
             # we should get an error while class is being constructed.
             @property
@@ -332,7 +332,7 @@ def test_property_field_detects_no_type_hint():
 
 def test_property_field_detects_setter_being_used():
     with pytest.raises(AssertionError, match='You can only use read-only properties'):
-        class ASettings(Settings):
+        class ASettings(BaseSettings):
             @property
             def random_property_field(self):
                 return None
@@ -347,7 +347,7 @@ def test_property_field_detects_setter_being_used():
 
 
 def test_settings_inheritance_without_fields_allowed():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         # Methods don't have fields generated for them.
         def test_method(self) -> int:
             return 1
@@ -387,7 +387,7 @@ def test_settings_inheritance_without_fields_allowed():
 
 
 def test_source_class():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: int
 
     field: SettingsField = MySettings._setting_fields["a"]
@@ -395,7 +395,7 @@ def test_source_class():
 
 
 def test_new_fields():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         a: int
 
     my_settings = MySettings()
@@ -412,7 +412,7 @@ def test_new_fields():
 
 
 def test_property_that_returns_diffrent_type():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         # Does not matter if this is before or after the property,
         # Python stores type annotations in a separate area vs normal class attribute values in
         # Python.
@@ -426,7 +426,7 @@ def test_property_that_returns_diffrent_type():
 
 
 def test_property_with_custom_field():
-    class MySettings(Settings):
+    class MySettings(BaseSettings):
         # Does not matter if this is before or after the property,
         # Python stores type annotations in a separate area vs normal class attribute values in
         # Python.
@@ -440,7 +440,7 @@ def test_property_with_custom_field():
 
 
 def test_converter_error_has_good_message():
-    class TestSettings(Settings):
+    class TestSettings(BaseSettings):
         # Default value is a blank string (can't convert to int directly).
         some_int_setting: int = ''
 
@@ -460,12 +460,12 @@ def test_super_class_with_default_value_uses_retriever():
 
         another_attr = 2
 
-    class PlainSettings(Settings):
+    class PlainSettings(BaseSettings):
         str_attr: str = "my-str"
         bool_attr: bool = False
 
-    class MySettings(Settings, PlainInterface):
-        # Make them fields in our Settings subclass, default value to another settings class.
+    class MySettings(BaseSettings, PlainInterface):
+        # Make them fields in our BaseSettings subclass, default value to another settings class.
         some_default_attr: str = PlainSettings.str_attr
         some_other_attr: bool = PlainSettings.bool_attr
         another_attr: int
@@ -479,13 +479,13 @@ def test_super_class_with_default_value_uses_retriever():
     # There is a retrieved/default value, so that's used over the superclass value.
     assert my_settings.some_other_attr is False
 
-    # If Settings can't get field value, it will get it from super-class.
+    # If BaseSettings can't get field value, it will get it from super-class.
     assert my_settings.another_attr == 2
 
 
 def test_inherit_settings_fields_from_parent_and_override_in_child():
-    class MyParentSettings(Settings):
-        # Make them fields in our Settings subclass, default value to another settings class.
+    class MyParentSettings(BaseSettings):
+        # Make them fields in our BaseSettings subclass, default value to another settings class.
         a: str
         b: bool = SettingsField(name="b_alt_name")
         c: int
@@ -514,18 +514,18 @@ def test_inherit_settings_fields_from_parent_and_override_in_child():
 
 def test_inherit_multiple_retrievers():
 
-    def r1(*, field: SettingsField, settings: Settings):
+    def r1(*, field: SettingsField, settings: BaseSettings):
         if field.name == 'a':
             return 'a-val'
         return None
 
-    def r2(*, field: SettingsField, settings: Settings):
+    def r2(*, field: SettingsField, settings: BaseSettings):
         if field.name == 'b_alt_name':
             return True
         return None
 
-    class MyParentSettings(Settings, default_retrievers=[r1, r2]):
-        # Make them fields in our Settings subclass, default value to another settings class.
+    class MyParentSettings(BaseSettings, default_retrievers=[r1, r2]):
+        # Make them fields in our BaseSettings subclass, default value to another settings class.
         a: str
         b: bool = SettingsField(name="b_alt_name")
         c: int
@@ -557,11 +557,11 @@ def test_inherit_multiple_retrievers():
 
 
 def test_grab_setting_values_from_parent_dependency_instances():
-    def r1(*, field: SettingsField, settings: Settings):
+    def r1(*, field: SettingsField, settings: BaseSettings):
         return 2 if field.name == 'c' else 'str-val'
 
-    class MySettings(Settings, default_retrievers=[r1]):
-        # Make them fields in our Settings subclass, default value to another settings class.
+    class MySettings(BaseSettings, default_retrievers=[r1]):
+        # Make them fields in our BaseSettings subclass, default value to another settings class.
         a: str
         b: str
         c: int
@@ -584,13 +584,13 @@ def test_grab_setting_values_from_parent_dependency_instances():
     assert my_settings.b == 'str-val'
     assert my_settings.c == 2
 
-    def r2(*, field: SettingsField, settings: Settings):
+    def r2(*, field: SettingsField, settings: BaseSettings):
         if field.name == 'b':
             return 'str-val-r2'
 
     with MySettings(r2):
         # These values come from the `r2` retriever, which should be checked first
-        # before the default-retriever at the Settings class level (ie: r1 further above).
+        # before the default-retriever at the BaseSettings class level (ie: r1 further above).
         assert my_settings.a == 'override-a'
         assert my_settings.b == 'str-val-r2'
         assert my_settings.c == 2
