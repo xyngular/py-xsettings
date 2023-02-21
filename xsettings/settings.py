@@ -514,6 +514,7 @@ Deprecated; Use `BaseSettings` instead.
 Here for backwards compatability, renamed original class from `Settings` to `BaseSettings`.
 """
 
+
 def _resolve_field_value(settings: BaseSettings, field: SettingsField, key: str, value: Any):
     cls = type(settings)
 
