@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/xyngular/py-xsettings/compare/v1.2.0...v1.2.1) (2023-02-21)
+
+
+### Bug Fixes
+
+* move dev only deps into correct group ([fb744de](https://github.com/xyngular/py-xsettings/commit/fb744de2333716b2d279b8aa6ad20dfd12374617))
+
 ## [1.2.0](https://github.com/xyngular/py-xsettings/compare/v1.1.2...v1.2.0) (2023-02-21)
 
 
