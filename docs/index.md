@@ -597,11 +597,11 @@ to follow:
    - Example: `with MySetting(some_setting='parent-value'):`
 3. Retrievers are consulted next.
     1. First, retriever set directly on field `xsettings.fields.SettingsField.retriever`.
-       1. This can include any field properties `@property`, they are set as the field retriever.
+       1. This can include any field properties `@property`, as they are set as the field retriever.
     2. Next, instance retriever(s) set directly on the Setting object that is being asked for its field value is checked.
-       1. via [`BaseSettings.add_instance_retrievers`](api/xsettings/settings.html#xsettings.settings.Settings.add_instance_retrievers){target=_blank}.
+       1. via [`BaseSettings.add_instance_retrievers`](api/xsettings/settings.html#xsettings.settings.Settings.settings__instance_retrievers){target=_blank}.
     3. Then any instance-retrievers in the dependency-chain are checked next (see step 2 above for more details).
-    4. Default-retrievers assigned to the class(es) are next checked, in `mro` order.
+    4. Default-retrievers assigned to the class(es) are next checked, in `mro` order (ie: parent/super-classes are checked last).
 4. Finally, any default-value for the field is consulted.
     - If the default-value is a property, or forward-ref then that is followed.
       - ie: `BaseSettings.some_attr = OtherSettings.another_attr_to_forward_ref_with`
@@ -609,6 +609,8 @@ to follow:
 
 Keep in mind that generally, if a value is a `property` (including forward-refs, which are also properties),
 they are followed via the standard `__get__` mechanism (see earlier in document for forward-ref details).
+
+You can add 
 
 ## Resolution Details
 

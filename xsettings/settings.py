@@ -145,6 +145,59 @@ class _SettingsMeta(type):
 
         return cls
 
+    settings__default_retrievers: 'List[SettingsRetrieverProtocol]'
+
+    # @SettingsClassProperty
+    @property
+    def settings__default_retrievers(self) -> 'List[SettingsRetrieverProtocol]':
+        """
+        You can add one or more retrievers to this `subclass` of BaseSettings
+        (modifies default_retrievers for the entire class + subclasses, only modifies this specific
+        class).
+
+        You can add or modify the list of default-retrievers via
+        `BaseSettings.settings__default_retrievers`. It's a list that you can directly modify;
+        ie: `MySettings.settings__default_retrievers.append(my_retriever)`.
+
+        ## Background
+
+        Below is a quick summary, you can see more detailed information in main docs under the
+        `"How Setting Field Values Are Resolved"` heading.
+
+        Directly set values (ie: `self.some_settings = 'some-value'`)
+        are first checked for in self, and next in `xinject.context.XContext.dependency_chain`
+        (looking at each instance currently in the dependency-chain, see link for details).
+
+        If value can't be found set on self or in dependency chain,
+        the retrievers are checked next.
+
+        First the field's individual retriever is checked (directly on field object,
+        this includes any `@property` fields too as the property getter method is stored on
+        field's individual retriever).
+
+        After the individual field retrievers are consulted, instance retrievers are checked next
+        before finally checking the default-retrievers for the entire class.
+
+        They are checked in the order added.
+
+        Child dependencies (of the same exactly class/type) in the
+        `xinject.context.XContext.dependency_chain` will also check these instance-retrievers.
+
+        The dependency chain is checked in the expected order of first consulting self,
+         then the chain in most recent parent first order.
+
+        For more details on how parent/child dependencies work see
+        `xinject.context.XContext.dependency_chain`.
+
+        After the dependency-chain is checked, the default-retrievers are checked
+        in python's `mro` (method-resolution-order), checking its own class first
+        before checking any super-classes for default-retrievers.
+
+        Returns:
+            A list of default-retrievers you can examine and/or modify as needed.
+        """
+        return self._default_retrievers
+
     def __getattr__(self, key: str) -> SettingsClassProperty:
         """
         We will return a `ClassProperty` object setup to retrieve the value asked for as
@@ -162,8 +215,17 @@ class _SettingsMeta(type):
         >>> MySettings.grab().my_url_setting = "my-url"
         >>> assert SomeClass.some_attr == "my-url"
         """
-        if key.startswith("_"):
-            return super().__getattr__(key)
+
+        # Anything that starts with `_` or starts with `settings__`
+        # is handled like a normal pythonattribute.
+        if key.startswith("_") or key.startswith("settings__"):
+            raise AttributeError(
+                f"An attribute lookup that start with `_` or `settings__` just happened ({key}) "
+                f"and it does not exist. "
+                f"Attributes name this way can't be fields, but they should also exist so there "
+                f"must be some sort of bug.... details: "
+                f"attribute name ({key}) on BaseSettings subclass ({self})."
+            )
 
         for c in self._setting_subclasses_in_mro:
             c: _SettingsMeta
@@ -346,8 +408,11 @@ class BaseSettings(
 
         obj = SomeSettings()
         obj.some_keyword_arg="hello"
-
         ```
+        Args:
+            retrievers: can be used to populate new instance's retrievers,
+            see `BaseSettings.settings__instance_retrievers`.
+
         """
         self._instance_retrievers = list(xloop(retrievers))
 
@@ -357,16 +422,41 @@ class BaseSettings(
     def add_instance_retrievers(
             self, retrievers: 'Union[List[SettingsRetrieverProtocol], SettingsRetrieverProtocol]'
     ):
+        from warnings import warn
+        warn(
+            f"BaseSettings.add_instance_retrievers is now deprecated, "
+            f"was used on subclass ({type(self)}); "
+            f"use property `settings__instance_retrievers` and call 'append' on result; "
+            f"ie: `my_settings.settings__instance_retrievers.append(retriever)"
+        )
+        self.settings__instance_retrievers.extend(xloop(retrievers))
+
+    @property
+    def settings__instance_retrievers(self) -> 'List[SettingsRetrieverProtocol]':
         """
         You can add one or more retrievers to this `instance` of settings
         (won't modify default_retrievers for the entire class, only modifies this specific
         instance).
 
-        Directly set values are first checked for in self, and next in
-        `xinject.context.XContext.dependency_chain`
+        You can add or modify the list of instance-retrievers via
+        `BaseSettings.settings__instance_retrievers`. It's a list that you can directly modify;
+        ie: `my_settings.settings__instance_retrievers.append(my_retriever)`.
+
+        ## Background
+
+        Below is a quick summary, you can see more detailed information in main docs under the
+        `"How Setting Field Values Are Resolved"` heading.
+
+        Directly set values (ie: `self.some_settings = 'some-value'`)
+        are first checked for in self, and next in `xinject.context.XContext.dependency_chain`
         (looking at each instance currently in the dependency-chain, see link for details).
 
-        If value can't be found the retrievers are next checked.
+        If value can't be found set on self or in dependency chain,
+        the retrievers are checked next.
+
+        First the field's individual retriever is checked (directly on field object,
+        this includes any `@property` fields too as the property getter method is stored on
+        field's individual retriever).
 
         After the individual field retrievers are consulted, instance retrievers are checked next
         before finally checking the default-retrievers for the entire class.
@@ -386,14 +476,15 @@ class BaseSettings(
         in python's `mro` (method-resolution-order), checking its own class first
         before checking any super-classes for default-retrievers.
 
-        Args:
-            retrievers (Union[List[SettingsRetrieverProtocol], SettingsRetrieverProtocol]): The
-                retriever(s) to add to the instance.
+        Returns:
+            A list of instance-retrievers you can examine and/or modify as needed.
         """
-        self._instance_retrievers.extend(xloop(retrievers))
+        return self._instance_retrievers
 
     def __getattribute__(self, key):
-        if key.startswith("_"):
+        # Anything that starts with `_` or starts with `settings__`
+        # is handled like a normal python attribute.
+        if key.startswith("_") or key.startswith("settings__"):
             return object.__getattribute__(self, key)
 
         attr_error = None
