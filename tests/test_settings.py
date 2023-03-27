@@ -560,11 +560,15 @@ def test_grab_setting_values_from_parent_dependency_instances():
     def r1(*, field: SettingsField, settings: BaseSettings):
         return 2 if field.name == 'c' else 'str-val'
 
-    class MySettings(BaseSettings, default_retrievers=[r1]):
+    class MySettings(BaseSettings):
         # Make them fields in our BaseSettings subclass, default value to another settings class.
         a: str
         b: str
         c: int
+
+    # we could have added this via `MySettings(..., default_retrievers=[r1])` above,
+    # but this lets us easily test adding it at run-time.
+    MySettings.settings__default_retrievers.append(r1)
 
     my_settings = MySettings.proxy()
     my_settings.a = "override-a"
@@ -580,6 +584,7 @@ def test_grab_setting_values_from_parent_dependency_instances():
         assert my_settings.b == 'override-via-child-instance-b'
         assert my_settings.c == 2
 
+    # ensure values are reverted...
     assert my_settings.a == 'override-a'
     assert my_settings.b == 'str-val'
     assert my_settings.c == 2
@@ -594,3 +599,17 @@ def test_grab_setting_values_from_parent_dependency_instances():
         assert my_settings.a == 'override-a'
         assert my_settings.b == 'str-val-r2'
         assert my_settings.c == 2
+
+    # ensure values are reverted...
+    assert my_settings.a == 'override-a'
+    assert my_settings.b == 'str-val'
+    assert my_settings.c == 2
+
+    # Try adding instance retriever after class was created.
+    MySettings.grab().settings__instance_retrievers.append(r2)
+
+    # These values come from the `r2` retriever, which should be checked first
+    # before the default-retriever at the BaseSettings class level (ie: r1 further above).
+    assert my_settings.a == 'override-a'
+    assert my_settings.b == 'str-val-r2'
+    assert my_settings.c == 2
