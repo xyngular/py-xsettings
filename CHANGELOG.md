@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/xyngular/py-xsettings/compare/v1.3.1...v1.4.0) (2023-05-24)
+
+
+### Features
+
+* allow a retriever to return `Default` sentinel value to indicate other retrievers should be skipped and default value for setting used. ([b3fa359](https://github.com/xyngular/py-xsettings/commit/b3fa359b2e6f6371cda98dc939debf7e723f83c0))
+
 ## [1.3.1](https://github.com/xyngular/py-xsettings/compare/v1.3.0...v1.3.1) (2023-04-15)
 
 
