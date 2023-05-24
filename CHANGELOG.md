@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1](https://github.com/xyngular/py-xsettings/compare/v1.3.0...v1.3.1) (2023-04-15)
+
+
+### Bug Fixes
+
+* license ([cdedfaf](https://github.com/xyngular/py-xsettings/commit/cdedfaf0506f53b23f720e60e36e21543a96eddb))
+
+## [1.3.0](https://github.com/xyngular/py-xsettings/compare/v1.2.1...v1.3.0) (2023-03-27)
+
+
+### Features
+
+* add ability to dynamically alter default retrievers for a class. ([2f5df69](https://github.com/xyngular/py-xsettings/commit/2f5df69ef2ed57c871be1d6a020f64672efa2d7b))
+
 ## [1.2.1](https://github.com/xyngular/py-xsettings/compare/v1.2.0...v1.2.1) (2023-02-21)
 
 
