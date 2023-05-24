@@ -24,6 +24,10 @@ class SettingsRetrieverProtocol(Protocol):
     Retrievers are tried in a specific order, the first one with a non-None retrieved value
     is the one that is used.
 
+    (Note: If you return the non-None value `xsentinels.default.Default`,
+           other retrievers will be skipped and the default value for the field will be used
+    )
+
     You can also add one or more retrievers to this `instance` of settings via the
     `xsettings.setting.BaseSettings.add_instance_retrievers` method
     (won't modify default_retrievers for the entire class, only modifies this specific instance).
