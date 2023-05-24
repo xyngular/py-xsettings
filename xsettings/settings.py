@@ -629,6 +629,12 @@ def _resolve_field_value(settings: BaseSettings, field: SettingsField, key: str,
 
         for retriever in xloop(field.retriever, self_and_parent_retrievers()):
             value = retriever(field=field, settings=settings)
+
+            if value is Default:
+                # Use whatever the default value is, don't fall back and look in other retrievers.
+                value = None
+                break
+
             if value is not None:
                 break
 
